@@ -26,7 +26,7 @@ public:
     void setBody(const std::string& body);
 
     // Converts the object into raw bytes ready to pass to send()
-    std::vector<char> serialize() const;
+    std::vector<char> createResponse() const;
 };
 
 #endif

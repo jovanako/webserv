@@ -27,6 +27,8 @@ private:
 
 public:
     HttpRequest();
+	HttpRequest(const HttpRequest& other);
+	HttpRequest& operator=(const HttpRequest& other);
     ~HttpRequest();
 
     // State and parsing helpers

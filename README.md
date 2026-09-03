@@ -79,3 +79,217 @@ Your server has to figure out the values for these headers dynamically before it
 - `200 OK`: Your code determines this because it successfully found and opened the requested file. If the file was missing, your code's `if/else` logic would swap this out for `404 Not Found`.
 
 - `text/html`: Your code will look at the file extension. You will likely write a small helper function that says: "If the file ends in `.html`, use `text/html`. If it ends in `.png`, use `image/png`." (These are called MIME types).
+
+- `46`: Your code calculates this by checking the size of the file (using `std::string::length()` or the `stat()` system call).
+
+- **The Body (HTML)**: This *does* live in a file! Your server will use `std::ifstream` to open a real file on your computer (like `/var/www/html/index.html`), read its contents into a variable, and stick it at the very end of the string.
+
+### The Final Step: `send()`
+
+Once your C++ code has glued all of this together into one giant `std::string`, where does it go?
+
+It goes to the `<sys/socket.h>` library. You will use the `send()` function to push this entire text string through your network socket, over the Wi-Fi cable, and directly into the Chrome or Firefox browser waiting on the other side.
+
+## What is an `.ipp` file?
+
+In C++, an `.ipp` file stands for Inline Plus Plus (or Implementation Plus Plus). It is a file used to store implementation of **templates** or **inline functions**.
+
+To understand why it exists, you have to look at how C++ normally splits files, and the problem that creates for templates.
+
+### The Problem: Templates Break the Normal Rules
+
+Normally, in C++, you split your code into two files:
+
+1. `.hpp` **(Header)**: Containt the declarations (the "table of contents" for your class).
+
+2. `.cpp` **(Source)**: Contains the actual logic (the implementation). These are compiled individually.
+
+**But templates are different.** When you write a template class (e.g. `template <typename T> class MyArray`), the C++ compiler needs to see the *entire implementation* right when you use it. If you put the implementation in a `.cpp` file, the compiler will throw "undefined reference" linker errors because it can't find the code it needs to generate the specific version of your template (like `MyArray<int>`).
+
+Because of this, you are forced to put the implementation of template classes directly inside the `.hpp` file.
+
+### The Solution: `.ipp` Files
+
+If you put all the implementation code inside your `.hpp` file, that file becomes massive, cluttered, and hard to read.
+
+The `.ipp` file is a purely organizational trick to keep your headers clean.
+
+**Here is how it works**:
+
+1. You put your declarations in the `.hpp` file.
+
+2. You put your template implementations in the `.ipp` file.
+
+3. At the very bottom of your `.hpp` file, you `#include` the `.ipp` file.
+
+### What it looks like in code:
+
+1. `MyTemplate.hpp` **(Clean and easy to read)**
+
+```
+#ifndef MYTEMPLATE_HPP
+#define MYTEMPLATE_HPP
+
+template <typename T>
+class MyTemplate {
+	private:
+		T _data;
+	public:
+		MyTemplate(T data);
+		T getData() const;
+};
+
+// Include implementation at the end!
+#include "MyTemplate.ipp"
+
+#endif
+```
+
+2. `MyTemplate.ipp` **(The Messy Implementation)**
+
+```
+// Notice: No #include "MyTemplate.hpp" at the top.
+// This file is meant to be injected INTO the header.
+
+template <typename T>
+MyTemplate<T>::MyTemplate(T data) : _data(data) {}
+
+template <typename T>
+T MyTemplate<T>::getData() const {
+	return _data;
+}
+```
+
+> `.tpp` is the same as `.ipp`.
+
+
+## `std::vector` and `std::map`
+
+`std::vector` and `std::map` are fundamental container types from the C++ Standard Template Library (STL) designed for distinct data management patterns:
+
+- `std::vector` is a dynamic array stored in contiguous memory that expands or shrinks automatically.
+
+- `std::map` is an associative container of sorted key-value pairs, implemented under the hood as a self-balancing bunary search tree (typically a Red-Black tree).
+
+### Key Comparison
+
+**Data Structure** 
+- `std::vector<T>`: Dynamic array (contiguous memory)
+
+- `std::map<Key, Value>`: Balanced binary search tree (node-based)
+
+**Element Access**
+
+- `std::vector<T>`: By integer index (`0` to `size-1`)
+
+- `std::map<Key, Value>`: By unique `Key`
+
+ **Ordering**
+
+- `std::vector<T>`: Insertion order preserved
+
+- `std::map<Key, Value>`: Sorted by `Key` (using `operator<`)
+
+**Header**
+
+- `std::vector<T>`: `#include <vector>`
+
+- `std::map<Key, Value>`: `#include <map>`
+
+### `std::vector` in Detail
+
+Use `std::vector` when you need a sequence of items, fast sequential iteration, cache-friendly memory layout, or direct index-based access (*O*(1)).
+
+> *O*(...) stands for **"Order of"** (often referred to as **Big-O Notation**). It describes the **order of magnitude** of an algorithm's growth rate - meaning how the running time or memory usage scales as the input sie (*n*) grows toward infinity.
+
+```
+#include <iostream>
+#include <vector>
+
+int main() {
+	// Declaration and initialization
+	std::vector<int> scores = {85, 92, 78};
+
+	// Appending elements
+	scores.push_back(95);
+	scores.emplace_back(88);
+
+	// Direct access
+	int first = scores[0];		// No bounds checking
+	int second = scores.at(1);	// Throws std::out_of_range if invalid
+
+	// Iterating
+	for (int score : scores) {
+		std::cout << score << " ";
+	}
+	std::cout << "\nSize: " << scores.size() << "\n";
+}
+```
+
+- **Memory behavior**: When full, vector allocates a larger chunk of memory (often 1.5x or 2x capacity), moves existing elements, and frees old storage. Use `scores.reserve(N)` if you know the size ahead of time to avoid reallocations.
+
+### `std::map` in Detail
+
+Use `std::map` when you need to associate values with unique identifiers (keys), retrieve items by key efficiently (*O*(log *n*)), and keep elements automatically sorted.
+
+```
+#include <iostream>
+#include <map>
+#include <string>
+
+int main() {
+	// Declaration: std::map<KeyType, ValueType>
+	std::map<std::string, int> inventory;
+
+	// Insertion
+	inventory["apples"] = 10;			// Inserts or overwrites
+	inventory.insert({"bananas", 5});	// Only inserts if key doesn't exist
+
+	// Lookup: .find() returns an iterator (avoids inserting default values)
+	auto it = inventory.find("apples");
+	if (it != inventory.end()) {
+		std::cout << "Apples in stock: " << it->second << "\n";
+	}
+
+	// Careful with operator[]:
+	// Accessing a missing key automatically inserts it with a default value (0)!
+	std::cout << "Oranges: " << inventory["oranges"] << "\n; // Inserts "oranges": 0
+
+	// Iterating: always ordered alphabetically by key
+	for (const auto& [item, count] : inventory) {
+		std::cout << item << ": " << count << "\n";
+	}
+}
+```
+
+### What is `auto`?
+
+In C++, `auto` is a keyword that tells the compiler to automatically deduce the type of a variable from its initialization expression at **compile time**.
+
+It does not make C++ dynamically typed like Python or JavaScript. The variable is still strictly and statically typed - you just don't have to type out the long type name yourself.
+
+```
+auto it = inventory.find("apples");
+```
+
+Assuming `inventory` is defined as:
+
+```
+std::map<std::string, int> inventory;
+```
+
+Without `auto`, you would have to write the full, verbose iterator type:
+
+```
+std::map<std::string, int>::iterator it = inventory.find("apples");
+```
+
+With `auto`, the compiler sees that `.find()` returns a `std::map<std::string, int>::iterator`, so it substitutes that exact type for `it` during compilation with **zero runtime overhead**.
+
+### What does `it` actually hold?
+
+Because `it` is an iterator to a map element, it behaves like a pointer to a pair of values:
+
+- `it->first`: the **key** (`"apples"`, of type `const std::string`)
+
+- `it->second`: the **value** (the count, of type `int`)
