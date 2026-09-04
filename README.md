@@ -307,3 +307,173 @@ Because `it` is an iterator to a map element, it behaves like a pointer to a pai
 - **Response Sterilization and Writing**: The server packages the response headers and payload into a serialized byte stream. Once `poll()` signals write-readiness (`POLLOUT`), the server transmits the bytes back to the client using non-blocking `send()` or `write()` operations.
 
 - **Cleanup and Termination**: After the complete response has been flushed to the client, the server either resets the state for persistent keep-alive connections or closes the file descriptor, frees memory, and removes the socket from the `poll()` array.
+
+# `recv()`
+
+The `recv()` function is a POSIX system call used to read incoming data from a connected network socket. It acts as the primary way your web server pulls the raw HTTP text sent by the client's browser into your program's memory.
+
+### The Syntax
+
+```
+#include <sys/socket.h>
+
+ssize_t recv(int sockfd, void *buf, size_t len, int flags);
+```
+
+### The Arguments
+
+- `sockfd`: The file descriptor of the connected client socket you want to read from.
+
+- `buf`: A pointer to the memory location (usually a `char` array or `std::vector` buffer) where the incoming bytes will be stored.
+
+- `len`: The maximum number of bytes you want to read in this single call (which should match or be smaller than the size of your buffer to prevent overflow).
+
+- `flags`: Special behavior modifiers. For standard HTTP reading, this is almost always set to `0`.
+
+### Interpreting Return Value
+
+The number returned by `recv()` is critical for your state machine logic, dictating exactly what your server should do next.
+
+**Return Values**:
+
+`> 0`
+
+*Meaning*: **Success**: The number of bytes successfully read into your buffer.
+
+*Server Action*: Append these bytes to your request parser. If the request isn't fully received yet, wait for the next `poll()` event.
+
+`0`
+
+*Meaning*: **Graceful Disconnect**: The client completely closed their end of the connection.
+
+*Server Action*: Safely destroy the client object, close the file descriptor, and remove it from your `poll()` array.
+
+`< 0`
+
+*Meaning*: **Error or Block**: An error occured, or no data is currently available on a non-blocking socket.
+
+*Server Action*: Handle the error or wait for the next `poll()` event.
+
+> **The Non-Blocking Requirement in Webserv**\
+Because your project strictly requires all sockets to be non-blocking, `recv()` behaves differently than standard blocking I/O. If you call `recv()` and there is no data waiting on the socket, it will not pause your program to wait for data. Instead, it instantly returns `-1`.\
+ \
+To prevent wasting CPU cycles constantly checking empty sockets, your server must never call `recv()` unless `poll()` (or `select`/`epoll`) has already confirmed that the socket has data to be read. Calling `recv()` on a descriptor without prior readiness notification from your event loop is a severe violation of the project rules.
+
+# socket
+
+A network socket is a software endpoint the establishes a **bidirectional communication channel** between two programs across a network. It acts as the literal **gateway** through which your server sends and receives all HTTP data.
+
+**In Unix-based systems, a socket is simply treated as a file descriptor** - an integer that the kernel uses to track an open I/O stream. Just like you can use `read()` and `write()` on a text file, you use them (or `recv()` and `send()`) on a socket to talk to a web browser.
+
+In your web server, you will manage two entirely different categories of sockets:
+
+**1. The Listening Sockets (The Receptionists)**
+
+- **Creation**: When your server boots, it uses the `socket()` system call to create these based on your configuration file.
+
+- **Identity**: You use `bind()` to lock them to a specific IP address and port (e.g., `0.0.0.0:8080`), and `listen()` to tell the OS they are ready to receive traffic.
+
+- **Purpose**: These sockets *never* read or write HTTP data. Their only job is to trigger a `POLLIN` event in your event loop when a new user tries to connect. When that happens, you call `accept()`.
+
+**2. The Client Sockets (The Workers)**
+
+- **Creation**: Every time you call `accept()` on a listening socket, the kernel generates a brand new, unique client socket (returning a new file descriptor).
+
+- **Purpose**: This is the actual dedicated pipeline to that specific user's web browser.
+
+- **Action**: You add this new file descriptor to your `poll()` array. When it triggers `POLLIN`, you call `recv()` to read the incoming HTTP request. When you are ready to reply and it triggers `POLLOUT`, you call `send()` to transmit the serialized HTTP response.
+
+> Because of your project's strict rules, every single one of those sockets (both listening and client) must be set to non-blocking mode using  `fcntl()` to ensure the server never freezes while waiting for network traffic.
+
+
+# `data()`
+
+The `.data()` method returns a direct pointer (`const char *`) to the internal memory array where the `std::string` stores its raw bytes.
+
+In C++98, there is a strict and important difference between `.data()` and `.c_str()`:
+
+### The Null-Terminator Guarantee
+
+- `.c_str()` guarantees that the returned character array will end with a `\0` (null terminator). In C++98, if the string did not naturally have a null terminator at the end of its memory block, calling `.c_str()` could force the string to reallocate its memory just to append that `\0`.
+
+- `.data()` makes no such guarantee. It simply hands you a pointer to the raw block of bytes exactly as they exist in memory, without adding anything. (Note: Since C++11, both methods were changed to behave identically and both guarantee a null terminator, but in C++98, they are distinct).
+
+### Why use `.data()` for the HTTP Body?
+
+When you are dealing with an HTTP body, you might be receiving a JPEG image, a PDF, or a compiled binary file.
+
+**1. It is Semantically Correct:** You are not dealing with a readable text string; you are dealing with a raw chunk of binary data. `.data()` communicates to anyone reading your code that you are working with raw memory bytes.
+
+**2. You Already Know the Size:** System calls like `recv()` and memory copy functions (like the vector's `insert()` method you are using in `appendBody()`) do not look for null terminators. They only care about the starting pointer and the exact number of bytes to copy (`contentLen`).
+
+**3. Performance:** By using `.data()`, you guarantee ero overhead. You bypass any unnecessary C++98 background checks for null terminators and just instantly dump the raw network bytes into your request objest.
+
+# How can I populate a map?
+
+In C++98, there are two primary ways to populate a `std::map`.
+
+**1. The Bracket Operator (`[]`)**
+
+This is the most readable and common syntax. If the key does not exist, the map creates it. If the key already exists, it overwrites the value.
+
+```
+std::map<std::string, std::string> headers;
+
+// Populating key-value pairs
+headers["Host"] = "localhost:8080";
+headers["Content-Length"] = "1024";
+headers["Connection"] = "keep-alive";
+```
+
+**2. The `insert()` Method**
+
+This method is strictly for adding new elements. If the key already exists, `insert()` does nothing and leaves the old value intact. Because a map requires a key-value pair, you must wrap your variables using `std::make_pair`.
+
+```
+#include <utility> // Required for std::make_pair
+
+std::map<std::string, std::string> headers;
+
+headers.insert(std::make_pair("Host", "localhost:8080"));
+```
+
+# How does `std::istringstream` work?
+
+`std::istringstream` (Input String Stream) is a C++ class that treats a standard string exactly as if it were a keyboard input stream like `std::cin` or a file stream like `std::ifstream`.
+
+Instead of forcing you to manually search for spaces and calculate substrings, it automatically tokenizes (splits) the string based on whitespace.
+
+`#include <sstream>`
+
+### How the Extraction Works
+
+When you write this line in your parser:
+
+```
+std::string method, uri, version;
+
+std::istringstream iss("GET    /index.html    HTTP/1.1");
+iss >> method >> uri >> version;
+```
+
+**Here is exactly what the `>>` (extraction) operator does step-by-step:**
+
+**1. Skips Leading Whitespace:** It looks at the start of the string. If there are any spaces or tabs, it ignores them.
+
+**2. Reads the First Word:** It reads characters into the `method` variable until it hits the next space. `method` becomes `"GET"`.
+
+**3. Pauses and Repeats:** It stops there. When it sees `>> uri`, it skips the intermediate spaces, reads the next block of text into `uri` (`"/index.html"`), and stops at the next space.
+
+**4. Finishes:** It repeats this for `version`, grabbing `"HTTP/1.1"`.
+
+### Why is it Safer Than `find()` and `substr()`
+
+- **It handles irregular spaces automatically:** If a buggy client sends two spaces betwee the method and the URI, manual `find(" ")` will grab an empty string and shift your entire parsing logic off by one. The string stream just skips the extra spaces transparently.
+
+- **It has built-in bounds checking:** If the string ends unexpectedly, `istringstream` simply stops reading. It will not crash with a segmentation fault like `substr()` does when given a bad index.
+
+### The Safety Check Explained
+
+When you chain extraction operators, the stream evaluates its own internal state. If the string only contained `"GET /index.html"`, the stream successfully fills `method` and `uri`, but hits the end of the string before it can fill `version`.
+
+When a stream fails to fill a requested variable, it sets an internal "fail bit." Wrapping the extraction in an `if` statement checks that fail bit. If the stream couldn't find all three required pieces of the HTTP request line, it evaluates to `false`, allowing you to safely reject the malformed request.

@@ -1,5 +1,6 @@
 #include "HttpRequest.hpp"
-#include "HttpResponse.hpp" 
+#include "HttpResponse.hpp"
+#include <sys/socket.h>
 
 class Client {
 public:
@@ -13,10 +14,15 @@ public:
     };
 
 private:
+	static const int	BUFFER_SIZE = 4096;
     int                 _socketFd;
     ConnectionState     _state;       // <--- The variable tracking where this client is
     HttpRequest         _request;
     HttpResponse        _response;
+
+	std::string			_readBuffer;
+	std::vector<char>	_writeBuffer;
+	size_t				_bytesSent;
     // ... buffers, timers, etc.
 
 public:
@@ -37,6 +43,8 @@ public:
 	void handleDone();
     
     void handleEvent(); // The core logic per client
+
+	void	parseHeaders();
 };
 
 /*
