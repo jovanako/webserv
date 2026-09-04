@@ -293,3 +293,17 @@ Because `it` is an iterator to a map element, it behaves like a pointer to a pai
 - `it->first`: the **key** (`"apples"`, of type `const std::string`)
 
 - `it->second`: the **value** (the count, of type `int`)
+
+# webserv processes
+
+- **Request Receipt and Header Reading**: When a client sends a request, the server detects read-readiness via `poll()` and reads raw bytes from the socket into a buffer until it encouters the double CRLF (`\r\n\r\n`) delimiter marking the end of the HTTP headers.
+
+- **Parsing and Body Reading**: The `HttpRequest` object decodes the request line and headers. If a body is attached (such as in a `POST` request), the server continues reading the payload based on the `Content-Length` header or un-chunks the data if chunked transfer encoding is used.
+
+- **Processing and Route Evaluation**: Once the request parsing finishes (`PARSE_DONE`), the server evaluates the request against configuration routing rules, validates allowed methods (`GET`, `POST`, `DELETE`), checks file permissions, and determines whether to serve a static file or execute a CGI script.
+
+- **CGI Execution (Conditional)**: If a dynamic script (like PHP or Python) is triggered, the server sets up anonymous pipes, forks a child process while passing environment variables, and monitors the CGI output asynchronously without freezing the main loop.
+
+- **Response Sterilization and Writing**: The server packages the response headers and payload into a serialized byte stream. Once `poll()` signals write-readiness (`POLLOUT`), the server transmits the bytes back to the client using non-blocking `send()` or `write()` operations.
+
+- **Cleanup and Termination**: After the complete response has been flushed to the client, the server either resets the state for persistent keep-alive connections or closes the file descriptor, frees memory, and removes the socket from the `poll()` array.

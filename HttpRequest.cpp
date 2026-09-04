@@ -26,7 +26,7 @@ HttpRequest& HttpRequest::operator=(const HttpRequest& other){
 HttpRequest::~HttpRequest() {}
 
 // Setters
-void HttpRequest::setState(ParseState state) {
+void HttpRequest::setRequestState(ParseState state) {
 	_state = state;
 }
 
@@ -55,7 +55,7 @@ int HttpRequest::getErrorCode() const {
 	return _errorCode;
 }
 
-HttpRequest::ParseState HttpRequest::getState() const {
+HttpRequest::ParseState HttpRequest::getRequestState() const {
 	return _state;
 }
 

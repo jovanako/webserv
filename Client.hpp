@@ -1,6 +1,6 @@
 #include "HttpRequest.hpp"
 #include "HttpResponse.hpp" 
-// Client.hpp
+
 class Client {
 public:
     enum ConnectionState {
@@ -20,11 +20,21 @@ private:
     // ... buffers, timers, etc.
 
 public:
+	Client();
     Client(int fd);
+	Client(const Client& other);
+	Client& operator=(const Client& other);
     ~Client();
 
-    ConnectionState getState() const { return _state; }
-    void setState(ConnectionState state) { _state = state; }
+    ConnectionState getClientState() const;
+    void setClientState(ConnectionState state);
+
+	void handleReadHeader();
+	void handleReadBody();
+	void handleProcessing();
+	void handleWriteResponse();
+	void handleCgiPipeWait();
+	void handleDone();
     
     void handleEvent(); // The core logic per client
 };

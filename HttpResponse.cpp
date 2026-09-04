@@ -2,9 +2,8 @@
 #include <string>
 #include <sstream>
 
-HttpResponse::HttpResponse() : _statusCode(0) {
+HttpResponse::HttpResponse() : _statusCode(0) {}
 
-}
 HttpResponse::HttpResponse(const HttpResponse& other) {
     *this = other;
 }
@@ -77,7 +76,7 @@ void HttpResponse::setBody(const std::string& body) {
     _body.assign(body.begin(), body.end());
 }
 
-// Converts the object into raw bytes ready to pass to send()
+// Converts the object into raw bytes ready to pass to send(
 std::vector<char> HttpResponse::createResponse() const {
     std::vector<char> response;
 

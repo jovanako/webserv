@@ -8,7 +8,7 @@ LocationConfig::LocationConfig()
       _cgiExtension(""),
       _cgiPath(""),
       _uploadStore(""),
-      _redirect(std::make_pair(0, "")) {}
+      _redirect(std::make_pair(0, std::string(""))) {}
 
 LocationConfig::LocationConfig(const LocationConfig& other) {
     *this = other;

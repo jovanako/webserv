@@ -17,6 +17,8 @@ private:
 
 public:
     HttpResponse();
+	HttpResponse(const HttpResponse& other);
+	HttpResponse& operator=(const HttpResponse& other);
     ~HttpResponse();
 
     // Setters for generating the response

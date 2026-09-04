@@ -32,8 +32,8 @@ public:
     ~HttpRequest();
 
     // State and parsing helpers
-    ParseState getState() const;
-    void setState(ParseState state);
+    ParseState getRequestState() const;
+    void setRequestState(ParseState state);
     void setErrorCode(int code);
     int getErrorCode() const;
 
