@@ -4,11 +4,11 @@ LocationConfig::LocationConfig()
     : _path(""),
       _root(""),
       _autoindex(false),
-      _index("index.html"),
-      _cgiExtension(""),
-      _cgiPath(""),
       _uploadStore(""),
-      _redirect(std::make_pair(0, std::string(""))) {}
+      _redirect(std::make_pair(0, std::string(""))) {
+		_index.push_back("index.html");
+		_index.push_back("index.htm");
+	  }
 
 LocationConfig::LocationConfig(const LocationConfig& other) {
     *this = other;
@@ -21,16 +21,13 @@ LocationConfig& LocationConfig::operator=(const LocationConfig& other) {
         _root = other._root;
         _autoindex = other._autoindex;
         _index = other._index;
-        _cgiExtension = other._cgiExtension;
-        _cgiPath = other._cgiPath;
+        _cgiHandlers = other._cgiHandlers;
         _uploadStore = other._uploadStore;
         _redirect = other._redirect;
     }
     return *this;
 }
-LocationConfig::~LocationConfig() {
-
-}
+LocationConfig::~LocationConfig() {}
 
 // Setters
 void LocationConfig::setPath(const std::string& path) {
@@ -46,11 +43,10 @@ void LocationConfig::setAutoindex(bool autoindex) {
 	_autoindex = autoindex;
 }
 void LocationConfig::setIndex(const std::string& index) {
-	_index = index;
+	_index.push_back(index);
 }
 void LocationConfig::setCgi(const std::string& extension, const std::string& path) {
-	_cgiExtension = extension;
-	_cgiPath = path;
+	_cgiHandlers[extension] = path;
 }
 void LocationConfig::setUploadStore(const std::string& uploadStore) {
 	_uploadStore = uploadStore;
@@ -72,15 +68,13 @@ const std::string& LocationConfig::getRoot() const {
 bool LocationConfig::getAutoindex() const {
 	return _autoindex;
 }
-const std::string& LocationConfig::getIndex() const {
+const std::vector<std::string>& LocationConfig::getIndex() const {
 	return _index;
 }
-const std::string& LocationConfig::getCgiExtension() const {
-	return _cgiExtension;
+const std::map<std::string, std::string>& LocationConfig::getCgiHandlers() const {
+	return _cgiHandlers;
 }
-const std::string& LocationConfig::getCgiPath() const {
-	return _cgiPath;
-}
+
 const std::string& LocationConfig::getUploadStore() const {
 	return _uploadStore;
 }

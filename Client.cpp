@@ -54,7 +54,8 @@ void Client::handleReadHeader() {
 
 	size_t headerEnd = _readBuffer.find("\r\n\r\n");
 	if (headerEnd != std::string::npos) {
-		//...HttpRequest parse header feed variables
+		// change state?
+		parseHeaders();
 		
 		// Only keep leftover bytes that belong to the body by deleting the header
 		_readBuffer.erase(0, headerEnd + 4);
@@ -96,7 +97,6 @@ void Client::handleReadBody() {
 
 		// Erase the body - leftovers are from next http request
 		_readBuffer.erase(0, contentLen);
-
 
 		_state = PROCESSING;
 	}
@@ -200,20 +200,3 @@ void Client::parseHeaders() {
 	}
 }
 
-/*
-parseHeaders explanation (concepts and method also explained in README):
-
-Why this version is safer:
-
-*	std::istringstream: Instead of manually chaining find and erase to get the 
-	method, URI, and version, a string stream treats the string exactly like 
-	std::cin. It safely extracts the three words separated by spaces. If there 
-	aren't exactly three words, the if (!(iss >> ...)) check catches it instantly.
-
-*	Targeted find(): By calculating lineEnd - lineStart, we give substr() the exact 
-	length it needs, rather than an absolute position.
-
-*	Whitespace Trimming: The HTTP standard requires servers to ignore spaces right 
-	after the colon (e.g., Host: localhost). The find_first_not_of logic safely strips 
-	that padding.
-*/

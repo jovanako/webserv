@@ -4,18 +4,18 @@
 #include <string>
 #include <vector>
 #include <utility> // For std::pair
+#include <map>
 
 class LocationConfig {
 private:
-    std::string                     _path;
-    std::vector<std::string>        _allowedMethods;
-    std::string                     _root;
-    bool                            _autoindex;
-    std::string                     _index;
-    std::string                     _cgiExtension;
-    std::string                     _cgiPath;
-    std::string                     _uploadStore;
-    std::pair<int, std::string>     _redirect;
+    std::string                        _path;
+    std::vector<std::string>           _allowedMethods;
+    std::string                        _root;
+    bool                               _autoindex;
+    std::vector<std::string>           _index;
+	std::map<std::string, std::string> _cgiHandlers;
+    std::string                        _uploadStore;
+    std::pair<int, std::string>        _redirect;
 
 public:
     // Default constructor
@@ -39,8 +39,8 @@ public:
     const std::vector<std::string>&     getAllowedMethods() const;
     const std::string&                  getRoot() const;
     bool                                getAutoindex() const;
-    const std::string&                  getIndex() const;
-    const std::string&                  getCgiExtension() const;
+    const std::vector<std::string>&     getIndex() const;
+    const std::map<std::string, std::string>&   getCgiHandlers() const;
     const std::string&                  getCgiPath() const;
     const std::string&                  getUploadStore() const;
     const std::pair<int, std::string>&  getRedirect() const;
