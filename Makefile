@@ -1,4 +1,4 @@
-NAME = bureaucrat
+NAME = webserv
 
 CXX = c++
 
@@ -9,6 +9,7 @@ SRCS = main.cpp \
 	HttpResponse.cpp \
 	LocationConfig.cpp \
 	ServerConfig.cpp \
+	ConfigParser.cpp \
 	Client.cpp 
 
 OBJDIR = objects
@@ -18,6 +19,7 @@ DEPS = HttpRequest.hpp \
 	   HttpResponse.hpp \
 	   LocationConfig.hpp \
 	   ServerConfig.hpp \
+	   ConfigParser.hpp \
 	   Client.hpp 
 
 all: $(NAME)

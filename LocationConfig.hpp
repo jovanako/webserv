@@ -26,13 +26,14 @@ public:
 
     // Setters
     void setPath(const std::string& path);
-    void addAllowedMethod(const std::string& method);
     void setRoot(const std::string& root);
     void setAutoindex(bool autoindex);
-    void setIndex(const std::string& index);
-    void setCgi(const std::string& extension, const std::string& path);
     void setUploadStore(const std::string& uploadStore);
     void setRedirect(int statusCode, const std::string& url);
+	
+    void addAllowedMethod(const std::string& method);
+    void addIndex(const std::string& index);
+    void addCgiHandler(const std::string& extension, const std::string& path);
 
     // Getters
     const std::string&                  getPath() const;
@@ -41,7 +42,6 @@ public:
     bool                                getAutoindex() const;
     const std::vector<std::string>&     getIndex() const;
     const std::map<std::string, std::string>&   getCgiHandlers() const;
-    const std::string&                  getCgiPath() const;
     const std::string&                  getUploadStore() const;
     const std::pair<int, std::string>&  getRedirect() const;
 };

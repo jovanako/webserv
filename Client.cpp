@@ -3,17 +3,16 @@
 
 Client::Client() 
 	: _socketFd(-1),
-	  _state(READING_HEADER)
+	  _state(READING_HEADER),
+	  _bytesSent(0)
   {
 
 }
 
 Client::Client(int fd)
 	: _socketFd(fd),
-	_state(READING_HEADER)
- {
-
-}
+	  _state(READING_HEADER),
+	  _bytesSent(0) {}
 
 Client::Client(const Client& other) {
 	*this = other;
@@ -26,6 +25,9 @@ Client& Client::operator=(const Client& other) {
 		_state = other._state;
 		_request = other._request;
 		_response = other._response;
+		_readBuffer = other._readBuffer;
+		_writeBuffer = other._writeBuffer;
+		_bytesSent = other._bytesSent;
 	}
 	return *this;
 }

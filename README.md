@@ -385,6 +385,24 @@ In your web server, you will manage two entirely different categories of sockets
 
 > Because of your project's strict rules, every single one of those sockets (both listening and client) must be set to non-blocking mode using  `fcntl()` to ensure the server never freezes while waiting for network traffic.
 
+Parameter Breakdown: `socket(AF_INET, SOCK_STREAM, 0)`
+When building an HTTP server, you pass three specific arguments to configure the socket for web traffic:
+
+Domain (AF_INET): Specifies the address family. This explicitly instructs the kernel that this socket will operate over IPv4 networks, rather than IPv6 (AF_INET6) or local Unix pipes (AF_UNIX).
+
+Type (SOCK_STREAM): Defines the communication semantics. This guarantees a reliable, sequenced, and two-way connection-oriented byte stream. In the networking world, this translates directly to requiring the TCP protocol (which HTTP relies on to ensure no data is lost in transit).
+
+Protocol (0): Instructs the kernel to automatically select the default underlying protocol that matches your requested domain and type. For AF_INET and SOCK_STREAM, the default is TCP.
+
+
+
+## ServerManager: The Network Orchestrator
+
+This class handles the macro-level network environment and the core multiplexing loop.  Initialization: It loops through your ServerConfig vector to create, configure (O_NONBLOCK), bind, and listen on the master sockets.  State Tracking: It maintains the array of pollfd structures required by poll(), alongside a map linking active client file descriptors to their corresponding Client objects.The Loop: It runs the infinite while(true) loop calling poll().  Dispatching: When poll() wakes up, the ServerManager routes the event. If a master socket is readable, it calls accept(), configures the new socket as non-blocking, and instantiates a new Client. If an existing client socket triggers an event, it delegates the work to that specific Client object.  
+
+## Client: The Connection Handler
+
+Your Client class already has the perfect scaffolding to handle the micro-level logic for individual connections. The ServerManager simply tells the Client when it is allowed to act.  State Machine: When the ServerManager detects POLLIN or POLLOUT, it calls client.handleEvent().  Data Assembly: The Client performs the actual recv() call and appends data to its internal _readBuffer.  Protocol Logic: The Client handles the HTTP parsing and transitions from READING_HEADER to READING_BODY based on the bytes received.  Response Transmission: When the ServerManager detects a socket is ready to write, the Client performs the send() call to transmit the generated response.By structuring it this way, your ServerManager never needs to parse HTTP, and your Client never needs to know how poll() works.
 
 # `data()`
 
@@ -477,3 +495,41 @@ iss >> method >> uri >> version;
 When you chain extraction operators, the stream evaluates its own internal state. If the string only contained `"GET /index.html"`, the stream successfully fills `method` and `uri`, but hits the end of the string before it can fill `version`.
 
 When a stream fails to fill a requested variable, it sets an internal "fail bit." Wrapping the extraction in an `if` statement checks that fail bit. If the stream couldn't find all three required pieces of the HTTP request line, it evaluates to `false`, allowing you to safely reject the malformed request.
+
+# Location root
+
+### Is it ok to have a location without a root?
+
+Yes, this is perfectly fine, particularly for your /old-page example. Because that route executes a return redirect, the server instantly sends a 301 response with the new URL to the client and never needs to look for files on the disk. Note: In NGINX, if a normal route lacks a root, it automatically inherits the root defined at the parent server block level. You might want to implement that inheritance logic later for complete NGINX parity.
+
+# Socket Struct `struct sockaddr_in`
+
+```
+struct in_addr {
+    uint32_t s_addr; // 32-bit IPv4 address
+};
+
+struct sockaddr_in {
+    sa_family_t    sin_family;  // Address family (always AF_INET for IPv4)
+
+    in_port_t      sin_port;    // 16-bit Port number (in network byte order)
+
+    struct in_addr sin_addr;    // 32-bit IPv4 address structure
+
+    char           sin_zero[8]; // Padding to match the size of 'struct sockaddr'
+};
+```
+
+# Socket struct `struct pollfd`
+
+```
+struct pollfd {
+    int   fd;         // The file descriptor to monitor
+    short events;     // The events you are requesting the kernel to watch
+    short revents;    // The actual events that occurred (returned by the kernel)
+};
+```
+
+Field Breakdown
+fd: The raw integer file descriptor (such as a master listening socket or an active client connection) that you are registering for the event loop. If you set this to a negative number, poll() safely ignores this specific array entry.  events: A bitmask where you tell the kernel exactly what to look for. In webserv, you will dynamically swap this between POLLIN (when you want to read an incoming HTTP request) and POLLOUT (when you are ready to write the HTTP response).  revents: The kernel automatically overwrites this field right before the poll() function returns to your program. It contains the result, allowing you to check if POLLIN or POLLOUT actually triggered, or if unexpected error events like POLLHUP (client disconnected unexpectedly) occurred.
+

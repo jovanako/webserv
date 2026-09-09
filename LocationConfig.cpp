@@ -5,10 +5,7 @@ LocationConfig::LocationConfig()
       _root(""),
       _autoindex(false),
       _uploadStore(""),
-      _redirect(std::make_pair(0, std::string(""))) {
-		_index.push_back("index.html");
-		_index.push_back("index.htm");
-	  }
+      _redirect(std::make_pair(0, std::string(""))) {}
 
 LocationConfig::LocationConfig(const LocationConfig& other) {
     *this = other;
@@ -42,10 +39,10 @@ void LocationConfig::setRoot(const std::string& root) {
 void LocationConfig::setAutoindex(bool autoindex) {
 	_autoindex = autoindex;
 }
-void LocationConfig::setIndex(const std::string& index) {
+void LocationConfig::addIndex(const std::string& index) {
 	_index.push_back(index);
 }
-void LocationConfig::setCgi(const std::string& extension, const std::string& path) {
+void LocationConfig::addCgiHandler(const std::string& extension, const std::string& path) {
 	_cgiHandlers[extension] = path;
 }
 void LocationConfig::setUploadStore(const std::string& uploadStore) {

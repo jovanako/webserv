@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <sstream>
 #include "LocationConfig.hpp" // Assumes you have this defined
 
 class ServerConfig {
@@ -33,6 +34,7 @@ public:
     // Getters (used by your request handler to make routing decisions)
     const std::string&                  getHost() const;
     int                                 getPort() const;
+	const std::string&					getPortString() const;
     const std::vector<std::string>&     getServerNames() const;
     const std::map<int, std::string>&   getErrorPages() const;
     size_t                              getClientMaxBodySize() const;

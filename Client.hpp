@@ -1,5 +1,9 @@
+#ifndef CLIENT_HPP
+#define CLIENT_HPP
+
 #include "HttpRequest.hpp"
 #include "HttpResponse.hpp"
+#include "ServerConfig.hpp"
 #include <sys/socket.h>
 
 class Client {
@@ -19,7 +23,7 @@ private:
     ConnectionState     _state;       // <--- The variable tracking where this client is
     HttpRequest         _request;
     HttpResponse        _response;
-
+	ServerConfig		_server;
 	std::string			_readBuffer;
 	std::vector<char>	_writeBuffer;
 	size_t				_bytesSent;
@@ -46,6 +50,8 @@ public:
 
 	void	parseHeaders();
 };
+
+#endif
 
 /*
 A robust state machine for a 42 webserv project typically requires 

@@ -23,6 +23,7 @@ class ConfigParser {
 		size_t parseSize(const std::string& sizeStr);
 	public:
 		ConfigParser();
+		ConfigParser(std::string filePath);
 		ConfigParser(const ConfigParser& other);
 		ConfigParser& operator=(const ConfigParser& other);
 		~ConfigParser();

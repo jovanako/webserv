@@ -1,5 +1,25 @@
 #include "ConfigParser.hpp"
 
+ConfigParser::ConfigParser(): _currentTokenIndex(0) {}
+
+ConfigParser::ConfigParser(std::string filePath) : _configFilePath(filePath) {}
+
+ConfigParser::ConfigParser(const ConfigParser& other) {
+	*this = other;
+}
+
+ConfigParser& ConfigParser::operator=(const ConfigParser& other) {
+	if (this != &other) {
+		_configFilePath = other._configFilePath;
+		_tokens = other._tokens;
+		_currentTokenIndex = other._currentTokenIndex;
+		_servers = other._servers;
+	}
+	return *this;
+}
+
+ConfigParser::~ConfigParser() {}
+
 void ConfigParser::tokenize() {
 	std::ifstream configFile(_configFilePath.c_str());
 	if (!configFile.is_open()) {
@@ -63,6 +83,8 @@ void ConfigParser::parseServerBlock() {
 			throw std::runtime_error("Config Error: Unknown server directive");
 		}
 	}
+	verifyToken("}");
+	_servers.push_back(server);
 }
 
 void ConfigParser::parseErrorPage(ServerConfig& server) {
@@ -93,6 +115,10 @@ void ConfigParser::parseErrorPage(ServerConfig& server) {
 
 void ConfigParser::parseLocationBlock(ServerConfig &server) {
 	LocationConfig location;
+	bool index_present = false;
+
+	std::vector<std::string> cgiExts;
+	std::vector<std::string> cgiPaths;
 
 	if (_currentTokenIndex < _tokens.size()) {
 		location.setPath(_tokens[_currentTokenIndex++]);
@@ -103,28 +129,77 @@ void ConfigParser::parseLocationBlock(ServerConfig &server) {
 	verifyToken("{");
 
 	while (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] != "}") {
-		if (_tokens[_currentTokenIndex] == "root") {
-			locations.
+		std::string directive = _tokens[_currentTokenIndex++];
+		
+		if (directive == "root") {
+			if(_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] != ";") {
+				location.setRoot(_tokens[_currentTokenIndex++]);
+			} else {
+				throw std::runtime_error("Config Error: Missing value for 'root'");
+			}
+			verifyToken(";");
 		}
-		else if (_tokens[_currentTokenIndex] == "index") {
-
+		else if (directive == "index") {
+			index_present = true;
+			while (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] != ";") {
+				location.addIndex(_tokens[_currentTokenIndex++]);
+			}
+			verifyToken(";");
 		}
-		else if (_tokens[_currentTokenIndex] == "allow_methods") {
-
+		else if (directive == "allow_methods") {
+			while (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] != ";") {
+				location.addAllowedMethod(_tokens[_currentTokenIndex++]);
+			}
+			verifyToken(";");
 		}
-		else if (_tokens[_currentTokenIndex] == "autoindex") {
-
+		else if (directive == "autoindex") {
+			if (_tokens[_currentTokenIndex] == "on") {
+				location.setAutoindex(true);
+			} else if (_tokens[_currentTokenIndex] == "off") {
+				location.setAutoindex(false);
+			} else {
+				throw std::runtime_error("Config Error: invalid autoindex");
+			}
+			_currentTokenIndex++;
+			verifyToken(";");
 		}
-		else if (_tokens[_currentTokenIndex] == "upload_store") {
-
+		else if (directive == "upload_store") {
+			location.setUploadStore(_tokens[_currentTokenIndex++]);
+			verifyToken(";");
 		}
-		else if (_tokens[_currentTokenIndex] == "cgi_ext" || _tokens[_currentTokenIndex] == "cgi_path") {
-			// create a flag for an already populated cgiHandlers
+		else if (directive == "cgi_ext"){
+			while (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] != ";") {
+				cgiExts.push_back(_tokens[_currentTokenIndex++]);
+			}
+			verifyToken(";");
 		}
-		else if (_tokens[_currentTokenIndex] == "return") {
-
+		else if (directive == "cgi_path") {
+			while (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] != ";") {
+				cgiPaths.push_back(_tokens[_currentTokenIndex++]);
+			}
+			verifyToken(";");
+		}
+		else if (directive == "return") {
+			location.setRedirect(std::atoi(_tokens[_currentTokenIndex].c_str()), _tokens[_currentTokenIndex + 1]);
+			_currentTokenIndex += 2;
+			verifyToken(";");
+		}
+		else {
+			throw std::runtime_error("Config Error: Unknown location directive");
 		}
 	}
+	verifyToken("}");
+
+	if (!index_present)
+		location.addIndex("index.html");
+
+	if (cgiExts.size() != cgiPaths.size()) {
+		throw std::runtime_error("Config Error: Count mismatch between cgi_ext and cgi_path");
+	}
+	for (size_t i = 0; i < cgiExts.size(); ++i) {
+		location.addCgiHandler(cgiExts[i], cgiPaths[i]);
+	}
+	server.addLocation(location);
 }
 
 
@@ -164,4 +239,25 @@ size_t ConfigParser::parseSize(const std::string& sizeStr) {
     }
 
 	return value * multiplier;
+}
+
+std::vector<ServerConfig> ConfigParser::parse() {
+	tokenize();
+	
+	_currentTokenIndex = 0;
+
+	while (_currentTokenIndex < _tokens.size()) {
+		if (_tokens[_currentTokenIndex] == "server") {
+			_currentTokenIndex++;
+			parseServerBlock();
+		} else {
+			throw std::runtime_error("Config Error: 'server' token missing, found token: '" + _tokens[_currentTokenIndex] + "'");
+		}
+	}
+
+	if (_servers.empty()) {
+		throw std::runtime_error("Config Error: No server blocks in configuration file");
+	}
+
+	return _servers;
 }
