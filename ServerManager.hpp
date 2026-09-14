@@ -25,6 +25,7 @@ class ServerManager {
 		void initServers();
 	public:
 		ServerManager();
+		ServerManager(const std::vector<ServerConfig>& servers);
 		ServerManager(const ServerManager& other);
 		ServerManager& operator=(const ServerManager& other);
 		~ServerManager();

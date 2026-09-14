@@ -1,7 +1,7 @@
 #include "HttpRequest.hpp"
 
 HttpRequest::HttpRequest()
-	: _state(PARSE_REQUEST_LINE),
+	: _parseState(PARSE_REQUEST_LINE),
 	  _contentLength(0),
 	  _errorCode(0) {}
 
@@ -11,7 +11,7 @@ HttpRequest::HttpRequest(const HttpRequest& other) {
 
 HttpRequest& HttpRequest::operator=(const HttpRequest& other){
 	if (this != &other) {
-		_state = other._state;
+		_parseState = other._parseState;
 		_method = other._method;
 		_uri = other._uri;
 		_version = other._version;
@@ -26,8 +26,8 @@ HttpRequest& HttpRequest::operator=(const HttpRequest& other){
 HttpRequest::~HttpRequest() {}
 
 // Setters
-void HttpRequest::setRequestState(ParseState state) {
-	_state = state;
+void HttpRequest::setRequestState(ParsingState state) {
+	_parseState = state;
 }
 
 void HttpRequest::setErrorCode(int code) {
@@ -55,8 +55,8 @@ int HttpRequest::getErrorCode() const {
 	return _errorCode;
 }
 
-HttpRequest::ParseState HttpRequest::getRequestState() const {
-	return _state;
+HttpRequest::ParsingState HttpRequest::getRequestState() const {
+	return _parseState;
 }
 
 const std::string& HttpRequest::getMethod() const {

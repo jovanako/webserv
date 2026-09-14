@@ -7,7 +7,7 @@
 
 class HttpRequest {
 public:
-    enum ParseState {
+    enum ParsingState {
         PARSE_REQUEST_LINE,
         PARSE_HEADERS,
         PARSE_BODY,
@@ -16,7 +16,7 @@ public:
     };
 
 private:
-    ParseState                          _state;
+    ParsingState                        _parseState;
     std::string                         _method;
     std::string                         _uri;
     std::string                         _version;
@@ -32,8 +32,8 @@ public:
     ~HttpRequest();
 
     // State and parsing helpers
-    ParseState getRequestState() const;
-    void setRequestState(ParseState state);
+    ParsingState getRequestState() const;
+    void setRequestState(ParsingState state);
     void setErrorCode(int code);
     int getErrorCode() const;
 

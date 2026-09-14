@@ -5,6 +5,8 @@
 #include "HttpResponse.hpp"
 #include "ServerConfig.hpp"
 #include <sys/socket.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
 class Client {
 public:
@@ -20,7 +22,7 @@ public:
 private:
 	static const int	BUFFER_SIZE = 4096;
     int                 _socketFd;
-    ConnectionState     _state;       // <--- The variable tracking where this client is
+    ConnectionState     _clientState;       // <--- The variable tracking where this client is
     HttpRequest         _request;
     HttpResponse        _response;
 	ServerConfig		_server;
@@ -38,6 +40,7 @@ public:
 
     ConnectionState getClientState() const;
     void setClientState(ConnectionState state);
+	void setServer(const ServerConfig& server);
 
 	void handleReadHeader();
 	void handleReadBody();

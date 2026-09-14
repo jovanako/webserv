@@ -3,15 +3,13 @@
 
 Client::Client() 
 	: _socketFd(-1),
-	  _state(READING_HEADER),
+	  _clientState(READING_HEADER),
 	  _bytesSent(0)
-  {
-
-}
+  {}
 
 Client::Client(int fd)
 	: _socketFd(fd),
-	  _state(READING_HEADER),
+	  _clientState(READING_HEADER),
 	  _bytesSent(0) {}
 
 Client::Client(const Client& other) {
@@ -22,7 +20,7 @@ Client& Client::operator=(const Client& other) {
 	if(this != &other)
 	{
 		_socketFd = other._socketFd;
-		_state = other._state;
+		_clientState = other._clientState;
 		_request = other._request;
 		_response = other._response;
 		_readBuffer = other._readBuffer;
@@ -35,12 +33,17 @@ Client& Client::operator=(const Client& other) {
 Client::~Client() {}
 
 Client::ConnectionState Client::getClientState() const {
-	return _state;
+	return _clientState;
 }
 
 void Client::setClientState(ConnectionState state) {
-	_state = state;
+	_clientState = state;
 }
+
+void Client::setServer(const ServerConfig& server) {
+	_server = server;
+}
+
 
 void Client::handleReadHeader() {
 	char buf[BUFFER_SIZE];
@@ -48,7 +51,7 @@ void Client::handleReadHeader() {
 
 	if (bytesRead <= 0) {
 		// 0 means client closed connection; < 0 means read error
-		_state = DONE;
+		_clientState = DONE;
 		return;
 	}
 
@@ -64,7 +67,7 @@ void Client::handleReadHeader() {
 
 		// If there is a body, handle it
 		if (_request.getContentLength() > 0) {
-			_state = READING_BODY;
+			_clientState = READING_BODY;
 			
 			// If we have already read part of the body
 			if (!_readBuffer.empty()) {
@@ -73,7 +76,7 @@ void Client::handleReadHeader() {
 		}
 		// Otherwise, if there is no body
 		else {
-			_state = PROCESSING;
+			_clientState = PROCESSING;
 		}
 	}
 }
@@ -88,7 +91,7 @@ void Client::handleReadBody() {
 		
 		if (bytesRead <= 0) {
 			// 0 means client closed connection; < 0 means read error
-			_state = DONE;
+			_clientState = DONE;
 			return;
 		}
 		_readBuffer.append(buf, bytesRead);
@@ -100,12 +103,100 @@ void Client::handleReadBody() {
 		// Erase the body - leftovers are from next http request
 		_readBuffer.erase(0, contentLen);
 
-		_state = PROCESSING;
+		_clientState = PROCESSING;
 	}
 }
 
 void Client::handleProcessing() {
-	
+	std::string uri = _request.getUri();
+	const LocationConfig* matchedLocation = NULL;
+	size_t longestMatch = 0;
+	bool cgiFlag = false;
+
+	const std::vector<LocationConfig>& locations = _server.getLocations();
+	for (std::vector<LocationConfig>::const_iterator it = locations.begin(); it != locations.end(); ++it) {
+		std::string locPath = it->getPath();
+
+		if (uri.find(locPath) == 0) {
+			if (locPath.length() > longestMatch) {
+				longestMatch = locPath.length();
+				matchedLocation = &(*it);
+			}
+		}
+	}
+	if (matchedLocation == NULL) {
+		_response.setStatusCode(404);
+		// 404 page?
+		setClientState(WRITING_RESPONSE);
+		return;
+	}
+
+	std::string method = _request.getMethod();
+	bool isAllowed = false;
+	const std::vector<std::string> allowedMethods = matchedLocation->getAllowedMethods();
+	for (std::vector<std::string>::const_iterator it = allowedMethods.begin(); it != allowedMethods.end(); ++it) {
+		if (*it == method) {
+			isAllowed = true;
+			break;
+		}
+	}
+
+	if (!isAllowed) {
+		_response.setStatusCode(405);
+		// 405 method not allowed
+		setClientState(WRITING_RESPONSE);
+		return;
+	}
+
+	if (_request.getContentLength() > _server.getClientMaxBodySize()) {
+		_response.setStatusCode(413);
+		// 413 Payload too large error
+		setClientState(WRITING_RESPONSE);
+		return;
+	}
+
+	const std::pair<int, std::string> redirect = matchedLocation->getRedirect();
+	if (!(redirect.first == 0 && redirect.second == "")) {
+		_response.setStatusCode(redirect.first); // check if it starts with 3?
+		_response.setHeader("Location", redirect.second);
+		setClientState(WRITING_RESPONSE);
+		return;
+	}
+
+	const std::map<std::string, std::string> cgiHandlers = matchedLocation->getCgiHandlers();
+	for (std::map<std::string, std::string>::const_iterator iter = cgiHandlers.begin(); iter != cgiHandlers.end(); ++iter) {
+		if (uri.find(iter->first) != std::string::npos) {
+			cgiFlag = true;
+			// execve(iter->second.c_str(), NULL, NULL); TO DO fork() ...
+			break;
+		}
+	}
+
+	if (method == "POST" && matchedLocation->getUploadStore() != "") {
+		// save the body payload to the designated directory
+	}
+
+	if (method == "GET") {
+		std::string fullPath = matchedLocation->getRoot() + uri;
+		struct stat path_stat;
+		if (stat(fullPath.c_str(), &path_stat) == 0) {
+			if (S_ISDIR(path_stat.st_mode)) {
+				bool autoindex = matchedLocation->getAutoindex();
+				// handle directory logic
+			}
+			else if (S_ISREG(path_stat.st_mode)) {
+				// read the file and serve it
+			}
+		}
+		else {
+			//the path does not exist on disc
+			_response.setStatusCode(404);
+		}
+	} 
+	// construct response
+	if (!cgiFlag) {
+		setClientState(WRITING_RESPONSE);
+	}
 }
 
 void Client::handleWriteResponse() {
@@ -121,7 +212,7 @@ void Client::handleDone() {
 }
 
 void Client::handleEvent() {
-	switch(_state)
+	switch(_clientState)
 	{
 		case READING_HEADER :
 			handleReadHeader();

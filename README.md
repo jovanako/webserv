@@ -533,3 +533,12 @@ struct pollfd {
 Field Breakdown
 fd: The raw integer file descriptor (such as a master listening socket or an active client connection) that you are registering for the event loop. If you set this to a negative number, poll() safely ignores this specific array entry.  events: A bitmask where you tell the kernel exactly what to look for. In webserv, you will dynamically swap this between POLLIN (when you want to read an incoming HTTP request) and POLLOUT (when you are ready to write the HTTP response).  revents: The kernel automatically overwrites this field right before the poll() function returns to your program. It contains the result, allowing you to check if POLLIN or POLLOUT actually triggered, or if unexpected error events like POLLHUP (client disconnected unexpectedly) occurred.
 
+### Next Steps & Logic Implementation
+
+- **Redirect Status Codes**: You left a comment asking if you should check if the redirect starts with 3. Yes, wrapping it in if (redirect.first >= 300 && redirect.first < 400) ensures you are handling a valid redirect configuration before setting the Location header. 
+
+- **Custom Error Pages**: Whenever you call _response.setStatusCode(404); (or similar), you should cross-reference _server.getErrorPages() to see if the webserv.conf defined a custom HTML file for that specific error code. If found, read that file and set it as the response body.  
+
+- **CGI Execution**: For your fork() and execve() TO-DO, remember to transition the client state to CGI_PIPE_WAIT rather than WRITING_RESPONSE so the main poll loop can safely monitor the pipes without blocking the server.
+
+>Check how HTTP version impacts things
