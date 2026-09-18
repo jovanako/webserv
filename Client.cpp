@@ -167,7 +167,8 @@ void Client::handleProcessing() {
 	for (std::map<std::string, std::string>::const_iterator iter = cgiHandlers.begin(); iter != cgiHandlers.end(); ++iter) {
 		if (uri.find(iter->first) != std::string::npos) {
 			cgiFlag = true;
-			// execve(iter->second.c_str(), NULL, NULL); TO DO fork() ...
+			// exeAssigns new contents to the vector, replacing its current contents, and modifying its size accordingly.
+cve(iter->second.c_str(), NULL, NULL); TO DO fork() ...
 			break;
 		}
 	}
@@ -193,14 +194,32 @@ void Client::handleProcessing() {
 			_response.setStatusCode(404);
 		}
 	} 
-	// construct response
+	// construct responsehandleWriteResponse
 	if (!cgiFlag) {
 		setClientState(WRITING_RESPONSE);
 	}
 }
 
-void Client::handleWriteResponse() {
 
+void Client::handleWriteResponse() {
+	if(_bytesSent == 0 && _writeBuffer.empty()) {
+		std::vector<char> raw = _response.createResponse();
+
+		_writeBuffer.assign(raw.begin(), raw.end());
+	}
+	size_t remainingBytes = _writeBuffer.size() - _bytesSent;
+
+	ssize_t bytesWritten = send(_socketFd, &_writeBuffer[_bytesSent], remainingBytes, 0);
+	if(bytesWritten <= 0) {
+		setClientState(DONE); //handle error?
+		return;
+	}
+
+	_bytesSent += bytesWritten;
+
+	if(_bytesSent >= _writeBuffer.size()) {
+		setClientState(DONE);
+	}
 }
 
 void Client::handleCgiPipeWait() {

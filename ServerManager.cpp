@@ -141,10 +141,10 @@ void ServerManager::run() {
 
 					Client::ConnectionState state = clientIter->second.getClientState();
 
-					if (state = Client::WRITING_RESPONSE)
+					if (state == Client::WRITING_RESPONSE)
 						_pollFds[i].events = POLLOUT;
 					
-					if (state = Client::DONE) {
+					if (state == Client::DONE) {
 						removeClient(_pollFds[i].fd);
 						continue;
 					}
