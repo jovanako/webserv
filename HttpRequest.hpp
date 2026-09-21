@@ -4,6 +4,8 @@
 #include <string>
 #include <map>
 #include <vector>
+#include <sstream>
+#include <cctype>
 
 class HttpRequest {
 public:

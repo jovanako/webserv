@@ -44,6 +44,13 @@ void Client::setServer(const ServerConfig& server) {
 	_server = server;
 }
 
+// check if we put in header
+bool isHostHeader(std::string key) {
+	for (size_t i = 0; i < key.length(); ++i) {
+		key[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(key[i])));
+	}
+	return key == "host";
+} 
 
 void Client::handleReadHeader() {
 	char buf[BUFFER_SIZE];
@@ -61,7 +68,17 @@ void Client::handleReadHeader() {
 	if (headerEnd != std::string::npos) {
 		// change state?
 		parseHeaders();
-		
+		if (_request.getVersion() == "HTTP/1.1") {
+			std::map<std::string, std::string> headers = _request.getHeaders();
+			for (std::map<std::string, std::string>::const_iterator it = headers.begin(); it != headers.end(); ++it) {
+				if (isHostHeader(it->first)) {
+					break; 
+				}
+			}
+			_response.setStatusCode(400); // 400 Bad Request strictly required for HTTP/1.1
+			setClientState(WRITING_RESPONSE);
+			return;
+		}
 		// Only keep leftover bytes that belong to the body by deleting the header
 		_readBuffer.erase(0, headerEnd + 4);
 
@@ -168,7 +185,7 @@ void Client::handleProcessing() {
 		if (uri.find(iter->first) != std::string::npos) {
 			cgiFlag = true;
 			// exeAssigns new contents to the vector, replacing its current contents, and modifying its size accordingly.
-cve(iter->second.c_str(), NULL, NULL); TO DO fork() ...
+	execve(iter->second.c_str(), NULL, NULL); // TO DO fork() ...
 			break;
 		}
 	}
@@ -277,7 +294,14 @@ void Client::parseHeaders() {
 	
 	_request.setMethod(method);
 	_request.setUri(uri);
-	_request.setVersion(version);
+	if (version == "HTTP/1.0" || version == "HTTP/1.1") {
+		_request.setVersion(version);
+	}
+	else {
+		_response.setStatusCode(505); // HTTP version not supported
+		setClientState(WRITING_RESPONSE);
+		return;
+	}
 	_request.setRequestState(HttpRequest::PARSE_HEADERS);
 
 	// 3. Parse the headers line by line
@@ -302,6 +326,8 @@ void Client::parseHeaders() {
 			size_t valueStart = value.find_first_not_of(" \t");
 			if (valueStart != std::string::npos) {
 				value = value.substr(valueStart);
+			} else {
+				value.clear();
 			}
 
 			_request.addHeader(key, value);

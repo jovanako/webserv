@@ -65,7 +65,7 @@ void HttpResponse::setStatusCode(int code) {
 }
 
 void HttpResponse::setHeader(const std::string& key, const std::string& value) {
-    _headers[key] = value;
+	_headers[key] = value;
 }
 
 void HttpResponse::setBody(const std::vector<char>& body) {

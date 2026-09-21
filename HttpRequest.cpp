@@ -35,15 +35,25 @@ void HttpRequest::setErrorCode(int code) {
 }
 
 void HttpRequest::setMethod(const std::string& method) {
-	_method = method;
+	if (method == "GET" || method == "POST" || method == "DELETE") {
+		_method = method;
+	} else {
+		_errorCode = 501; // 501 Not Implemented
+		_parseState = PARSE_ERROR;
+	}
 }
 
 void HttpRequest::setUri(const std::string& uri) {
-	_uri = uri;
+	_uri = uri; // check validity
 }
 
 void HttpRequest::setVersion(const std::string& version) {
-	_version = version;
+	if (version == "HTTP/1.0" || version == "HTTP/1.1") {
+		_version = version;
+	} else {
+		_errorCode = 501; // 501 Not Implemented
+		_parseState = PARSE_ERROR;
+	}
 }
 
 void HttpRequest::setContentLength(size_t len) {
@@ -83,8 +93,155 @@ size_t HttpRequest::getContentLength() const {
 	return _contentLength;
 }
 
+static bool isValidHeaderKey(const std::string& key) {
+	if (key.empty())
+		return false;
+
+	// Characters explicitly forbidden in an HTTP header field-name token
+	const std::string invalidChars = " \t\r\n:()<>@,;:\\\"/[]?={}";
+	
+	for (size_t i = 0; i < key.length(); ++i) {
+		unsigned char c = static_cast<unsigned char>(key[i]);
+
+		// non-printable ASCII, control chars, and DEL
+		if (c <= 32 || c >= 127)
+			return false;
+
+		// RFC separator chars
+		if (invalidChars.find(static_cast<char>(c)) != std::string::npos)
+			return false;
+	}
+	return true;
+}
+
+static bool isValidIpv4(const std::string& host) {
+    if (host.empty() || host[0] == '.' ||  host[host.length() - 1] != '.')
+		return false;
+
+	std::istringstream ss(host);
+    std::string segment;
+    int count = 0;
+
+    while (std::getline(ss, segment, '.')) {
+        if (segment.empty() || segment.length() > 3)
+            return false;
+
+        for (size_t i = 0; i < segment.length(); ++i) {
+            if (!std::isdigit(static_cast<unsigned char>(segment[i])))
+                return false;
+        }
+
+        // Convert and check range [0, 255]
+        std::istringstream numStream(segment);
+        int val;
+        numStream >> val;
+        if (val < 0 || val > 255)
+            return false;
+
+        // Reject leading zeros (e.g. "01" is invalid)
+        if (segment.length() > 1 && segment[0] == '0')
+            return false;
+
+        count++;
+    }
+
+    // Must have exactly 4 octets and no trailing dot
+    return count == 4;
+}
+
+static bool isValidDomain(const std::string& host) {
+    if (host.empty() || host.length() > 253)
+        return false;
+
+    // Check each dot-separated label
+    size_t start = 0;
+    while (start < host.length()) {
+        size_t end = host.find('.', start);
+        if (end == std::string::npos)
+            end = host.length();
+
+        std::string label = host.substr(start, end - start);
+
+        // Label length must be between 1 and 63 characters
+        if (label.empty() || label.length() > 63)
+            return false;
+
+        // Label cannot start or end with a hyphen
+        if (label[0] == '-' || label[label.length() - 1] == '-')
+            return false;
+
+        // All characters in label must be alphanumeric or hyphen
+        for (size_t i = 0; i < label.length(); ++i) {
+            char c = label[i];
+            if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-')
+                return false;
+        }
+
+        start = end + 1;
+    }
+
+    return true;
+}
+
+static bool isValidHost(const std::string& hostHeaderValue) {
+    if (hostHeaderValue.empty())
+        return false;
+
+    std::string host = hostHeaderValue;
+
+    // Split off the optional port (:port)
+    size_t colonPos = hostHeaderValue.find(':');
+    if (colonPos != std::string::npos) {
+        host = hostHeaderValue.substr(0, colonPos);
+        std::string portStr = hostHeaderValue.substr(colonPos + 1);
+
+        if (portStr.empty())
+            return false;
+
+        for (size_t i = 0; i < portStr.length(); ++i) {
+            if (!std::isdigit(static_cast<unsigned char>(portStr[i])))
+                return false;
+        }
+
+        std::istringstream ss(portStr);
+        long port;
+        ss >> port;
+        if (port < 1 || port > 65535)
+            return false;
+    }
+
+    if (isValidIpv4(host))
+        return true;
+
+    return isValidDomain(host);
+}
+
 void HttpRequest::addHeader(const std::string& key, const std::string& value) {
-	_headers[key] = value;
+	if (isValidHeaderKey(key)) {
+		std::string lowerKey = key;
+		for (size_t i = 0; i < lowerKey.length(); ++i) {
+			lowerKey[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(lowerKey[i])));
+		}
+		// reject if host, content-length or transfer-encoding have duplicates
+		if (lowerKey == "host" || lowerKey == "content-length" || lowerKey == "transfer-encoding") {
+			std::map<std::string, std::string>::iterator it = _headers.find(lowerKey);
+			if (it != _headers.end()) {
+				setErrorCode(400); // check which code
+				setRequestState(PARSE_ERROR);
+				return;
+			}
+		}
+		if (lowerKey == "host" && !isValidHost(value)) {
+			setErrorCode(400);
+			setRequestState(PARSE_ERROR);
+			return;
+		}
+		_headers[lowerKey] = value;
+		return;
+	}
+	setErrorCode(400); // Bad Request
+	setRequestState(PARSE_ERROR);
+	return;
 }
 
 void HttpRequest::appendBody(const char* data, size_t size) {
