@@ -40,7 +40,7 @@ Here is a breakdown of how and where your code will generate this string.
 
 ### 1. The Assembly Line (Your C++ Code)
 
-When your server realies a client wants to see `index.html`, and your server successfully finds that file on your hard drive, your code will start concatenating a massive `std::string`.
+When your server realizes a client wants to see `index.html`, and your server successfully finds that file on your hard drive, your code will start concatenating a massive `std::string`.
 
 It looks roughly like this in C++:
 
