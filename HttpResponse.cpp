@@ -46,6 +46,7 @@ std::string HttpResponse::getStatusMessage(int code) const {
         case 408: return "Request Timeout";
         case 411: return "Length Required";
         case 413: return "Payload Too Large";
+		case 414: return "URI Too Long";
         
         // 5xx Server Error
         case 500: return "Internal Server Error";

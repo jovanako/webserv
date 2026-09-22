@@ -45,12 +45,27 @@ void Client::setServer(const ServerConfig& server) {
 }
 
 // check if we put in header
-bool isHostHeader(std::string key) {
+static bool isHostHeader(std::string key) {
 	for (size_t i = 0; i < key.length(); ++i) {
 		key[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(key[i])));
 	}
 	return key == "host";
-} 
+}
+
+static bool isValidUri(const std::string& uri) {
+	if (uri.empty() || uri[0] != '/')
+		return false;
+	if (uri.length() > Client::MAX_URI_LENGTH)
+		return false;
+
+	for (size_t i = 0; i < uri.length(); ++i) {
+		unsigned char c = static_cast<unsigned char>(uri[i]);
+		// don't allow spaces, control chars, and non-ASCII bytes
+		if (c <= 32 || c >= 127)
+			return false;
+	}
+	return true;
+}
 
 void Client::handleReadHeader() {
 	char buf[BUFFER_SIZE];
@@ -250,31 +265,45 @@ void Client::handleDone() {
 
 }
 
-void Client::handleEvent() {
-	switch(_clientState)
-	{
-		case READING_HEADER :
-			handleReadHeader();
-			break;
-		case READING_BODY :
-			handleReadBody();
-			break;
-		case PROCESSING :
-			handleProcessing();
-			break;
-		case WRITING_RESPONSE :
-			handleWriteResponse();
-			break;
-		case CGI_PIPE_WAIT :
-			handleCgiPipeWait();
-			break;
-		case DONE :
-			handleDone();
-			break;
-		default:
-			break;
+void Client::handleRead() {
+	if (_clientState == READING_HEADER) {
+		handleReadHeader();
+	} else if (_clientState == READING_BODY) {
+		handleReadBody();
 	}
 }
+
+void Client::handleWrite() {
+	if (_clientState == WRITING_RESPONSE) {
+		handleWriteResponse();
+	}
+}
+
+// void Client::handleEvent() {
+// 	switch(_clientState)
+// 	{
+// 		case READING_HEADER :
+// 			handleReadHeader();
+// 			break;
+// 		case READING_BODY :
+// 			handleReadBody();
+// 			break;
+// 		case PROCESSING :
+// 			handleProcessing();
+// 			break;
+// 		case WRITING_RESPONSE :
+// 			handleWriteResponse();
+// 			break;
+// 		case CGI_PIPE_WAIT :
+// 			handleCgiPipeWait();
+// 			break;
+// 		case DONE :
+// 			handleDone();
+// 			break;
+// 		default:
+// 			break;
+// 	}
+// }
 
 void Client::parseHeaders() {
 	// 1. Find the end of the first line
@@ -290,8 +319,25 @@ void Client::parseHeaders() {
 	std::string method, uri, version; // check in the 42 rules if this multiple declaration is ok
 
 	if (!(iss >> method >> uri >> version)) {
-		_request.setErrorCode(400); // Bad Request
-		_request.setRequestState(HttpRequest::PARSE_ERROR);
+		_response.setStatusCode(400); // Bad Request
+		setClientState(WRITING_RESPONSE);
+		return;
+	}
+
+	std::string extra;
+	if (iss >> extra) {
+		_response.setStatusCode(400);
+		setClientState(WRITING_RESPONSE);
+		return;
+	}
+
+	if (!isValidUri(uri)) {
+		if (uri.length() > MAX_URI_LENGTH) {
+			_response.setStatusCode(414); // 414 uri too long
+		} else {
+			_response.setStatusCode(400); // 400 bad request
+		}
+		setClientState(WRITING_RESPONSE);
 		return;
 	}
 	

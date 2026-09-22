@@ -158,6 +158,7 @@ void ServerManager::run() {
 				Client::ConnectionState state = client.getClientState();
 
 				if (state == Client::DONE) {
+					client.handleDone();
 					removeClient(currentFd);
 					continue; // do not increment i, elements shifted left
 				}

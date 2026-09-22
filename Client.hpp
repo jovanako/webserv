@@ -10,6 +10,8 @@
 
 class Client {
 public:
+	static const size_t MAX_URI_LENGTH = 8192;
+
     enum ConnectionState {
         READING_HEADER,
         READING_BODY,
@@ -35,7 +37,6 @@ private:
 	void handleReadBody();
 	void handleWriteResponse();
 	void handleCgiPipeWait();
-	void handleDone();
 
 public:
 	Client();
@@ -51,8 +52,9 @@ public:
 	void handleRead();
 	void handleWrite();
 	void handleProcessing();
+	void handleDone();
     
-	void	parseHeaders();
+	void parseHeaders();
 };
 
 #endif
