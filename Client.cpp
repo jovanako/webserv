@@ -68,16 +68,20 @@ void Client::handleReadHeader() {
 	if (headerEnd != std::string::npos) {
 		// change state?
 		parseHeaders();
+		bool hasHost = false;
 		if (_request.getVersion() == "HTTP/1.1") {
 			std::map<std::string, std::string> headers = _request.getHeaders();
 			for (std::map<std::string, std::string>::const_iterator it = headers.begin(); it != headers.end(); ++it) {
 				if (isHostHeader(it->first)) {
+					hasHost = true;
 					break; 
 				}
 			}
-			_response.setStatusCode(400); // 400 Bad Request strictly required for HTTP/1.1
-			setClientState(WRITING_RESPONSE);
-			return;
+			if (!hasHost) {
+				_response.setStatusCode(400); // 400 Bad Request strictly required for HTTP/1.1
+				setClientState(WRITING_RESPONSE);
+				return;
+			}
 		}
 		// Only keep leftover bytes that belong to the body by deleting the header
 		_readBuffer.erase(0, headerEnd + 4);
@@ -101,9 +105,8 @@ void Client::handleReadHeader() {
 void Client::handleReadBody() {
 	char buf[BUFFER_SIZE];
 	size_t contentLen = _request.getContentLength();
-	size_t lengthRead = _readBuffer.length();
 
-	if (lengthRead < contentLen) {
+	if (_readBuffer.length() < contentLen) {
 		ssize_t bytesRead = recv(_socketFd, buf, sizeof(buf), 0);
 		
 		if (bytesRead <= 0) {
@@ -114,7 +117,7 @@ void Client::handleReadBody() {
 		_readBuffer.append(buf, bytesRead);
 	}
 
-	if (lengthRead >= contentLen) {
+	if (_readBuffer.length() >= contentLen) {
 		_request.appendBody(_readBuffer.data(), contentLen);
 
 		// Erase the body - leftovers are from next http request

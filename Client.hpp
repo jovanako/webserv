@@ -31,6 +31,12 @@ private:
 	size_t				_bytesSent;
     // ... buffers, timers, etc.
 
+	void handleReadHeader();
+	void handleReadBody();
+	void handleWriteResponse();
+	void handleCgiPipeWait();
+	void handleDone();
+
 public:
 	Client();
     Client(int fd);
@@ -42,15 +48,10 @@ public:
     void setClientState(ConnectionState state);
 	void setServer(const ServerConfig& server);
 
-	void handleReadHeader();
-	void handleReadBody();
+	void handleRead();
+	void handleWrite();
 	void handleProcessing();
-	void handleWriteResponse();
-	void handleCgiPipeWait();
-	void handleDone();
     
-    void handleEvent(); // The core logic per client
-
 	void	parseHeaders();
 };
 

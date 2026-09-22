@@ -93,6 +93,12 @@ size_t HttpRequest::getContentLength() const {
 	return _contentLength;
 }
 
+static void handleError(HttpRequest& request) {
+	request.setErrorCode(400);
+	request.setRequestState(HttpRequest::PARSE_ERROR);
+	return;
+}
+
 static bool isValidHeaderKey(const std::string& key) {
 	if (key.empty())
 		return false;
@@ -217,30 +223,43 @@ static bool isValidHost(const std::string& hostHeaderValue) {
 }
 
 void HttpRequest::addHeader(const std::string& key, const std::string& value) {
-	if (isValidHeaderKey(key)) {
-		std::string lowerKey = key;
-		for (size_t i = 0; i < lowerKey.length(); ++i) {
-			lowerKey[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(lowerKey[i])));
+	if (!isValidHeaderKey(key)) {
+		return handleError(*this);
+	}
+	std::string lowerKey = key;
+	for (size_t i = 0; i < lowerKey.length(); ++i) {
+		lowerKey[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(lowerKey[i])));
+	}
+
+	// reject if host, content-length or transfer-encoding have duplicates
+	if (lowerKey == "host" || lowerKey == "content-length" || lowerKey == "transfer-encoding") {
+		if(_headers.find(lowerKey) != _headers.end()) {
+			return handleError(*this);
 		}
-		// reject if host, content-length or transfer-encoding have duplicates
-		if (lowerKey == "host" || lowerKey == "content-length" || lowerKey == "transfer-encoding") {
-			std::map<std::string, std::string>::iterator it = _headers.find(lowerKey);
-			if (it != _headers.end()) {
-				setErrorCode(400); // check which code
-				setRequestState(PARSE_ERROR);
-				return;
+	}
+
+	if (lowerKey == "host" && !isValidHost(value)) {
+		return handleError(*this);
+	}
+
+	if (lowerKey == "content-length") {
+		if (value.empty()) {
+			return handleError(*this);
+		}
+
+		for (size_t i = 0; i < value.length(); ++i) {
+			if (!std::isdigit(static_cast<unsigned char>(value[i]))) {
+				return handleError(*this);
 			}
 		}
-		if (lowerKey == "host" && !isValidHost(value)) {
-			setErrorCode(400);
-			setRequestState(PARSE_ERROR);
-			return;
-		}
-		_headers[lowerKey] = value;
-		return;
+
+		std::istringstream iss(value);
+		size_t len;
+		iss >> len;
+		setContentLength(len);
 	}
-	setErrorCode(400); // Bad Request
-	setRequestState(PARSE_ERROR);
+	
+	_headers[lowerKey] = value;
 	return;
 }
 

@@ -46,9 +46,10 @@ void ServerManager::removeClient(int clientFd) {
 	close(clientFd);
 	_clients.erase(clientFd);
 	for (std::vector<struct pollfd>::iterator it = _pollFds.begin(); it != _pollFds.end(); ++it) {
-		if (it->fd == clientFd)
+		if (it->fd == clientFd) {
 			_pollFds.erase(it);
 			break;
+		}
 	}
 }
 
@@ -115,9 +116,11 @@ void ServerManager::run() {
 				continue;
 			}
 
+			int currentFd = _pollFds[i].fd;
+
 			// catch unexpected disconnects and errors
 			if (_pollFds[i].revents & (POLLERR | POLLHUP | POLLNVAL)) {
-				removeClient(_pollFds[i].fd);
+				removeClient(currentFd);
 				continue;
 			}
 
@@ -125,7 +128,7 @@ void ServerManager::run() {
 			std::map<int, ServerConfig*>::iterator serverIter = _listenSockets.find(_pollFds[i].fd);
 			if (serverIter != _listenSockets.end() && serverIter->second != NULL) {
 				if (_pollFds[i].revents & POLLIN) {
-					acceptClient(_pollFds[i].fd);
+					acceptClient(currentFd);
 				}
 				i++;
 				continue;
@@ -134,24 +137,54 @@ void ServerManager::run() {
 			// handle existing client traffic
 			std::map<int, Client>::iterator clientIter = _clients.find(_pollFds[i].fd);
 			if (clientIter != _clients.end()) {
+				Client& client = clientIter->second;
 
-				//allow processing for either read or write readiness
-				if (_pollFds[i].revents & (POLLIN | POLLOUT)) {
-					clientIter->second.handleEvent();
-
-					Client::ConnectionState state = clientIter->second.getClientState();
-
-					if (state == Client::WRITING_RESPONSE)
-						_pollFds[i].events = POLLOUT;
-					
-					if (state == Client::DONE) {
-						removeClient(_pollFds[i].fd);
-						continue;
-					}
+				// 1. read incoming data if readable
+				if (_pollFds[i].revents & POLLIN) {
+					client.handleRead();
 				}
 
+				// 2. perform route matching and preparation if reading is complete
+				if (clientIter->second.getClientState() == Client::PROCESSING) {
+					clientIter->second.handleProcessing();
+				}
+
+				// 3. send response if socket is writable
+				if (_pollFds[i].revents & POLLOUT) {
+					clientIter->second.handleWrite();
+				}
+
+				// 4. remove client if client requested termination or completed response
+				Client::ConnectionState state = client.getClientState();
+
+				if (state == Client::DONE) {
+					removeClient(currentFd);
+					continue; // do not increment i, elements shifted left
+				}
+
+				// 5. keep poll events synchronized with client state
+				if (state == Client::WRITING_RESPONSE) {
+					_pollFds[i].events = POLLOUT;					
+				} else {
+					_pollFds[i].events = POLLIN;
+				}
 			}
 			i++;
 		}
 	}
 }
+
+/*
+CGI I/O that can wait for data must be non-blocking and driven by poll()
+
+Pipes created for child CGI stdin/stdout are I/O descriptors that 
+can block. Reading or writing to pipes without monitoring them in 
+your main poll() loop can cause deadlocks on large CGI payloads, 
+violating the rule: "Calling read/recv or write/send on these 
+descriptors without prior readiness will result in a grade of 0".
+
+Clients must be able to upload files" and "At least GET, POST, 
+DELETE methods
+
+In Client.cpp, file serving, autoindex generation, POST file 
+uploading, and DELETE handling are currently empty stubs or comments.*/
