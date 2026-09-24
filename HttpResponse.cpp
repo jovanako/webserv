@@ -59,6 +59,15 @@ std::string HttpResponse::getStatusMessage(int code) const {
     }
 }
 
+int HttpResponse::getStatusCode() const {
+	return _statusCode;
+}
+
+std::vector<char> HttpResponse::getBody() const {
+	return _body;
+}
+
+
 // Setters for generating the response
 void HttpResponse::setStatusCode(int code) {
     _statusCode = code;

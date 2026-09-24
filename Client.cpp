@@ -73,6 +73,7 @@ void Client::handleReadHeader() {
 
 	if (bytesRead <= 0) {
 		// 0 means client closed connection; < 0 means read error
+		// handle error
 		_clientState = DONE;
 		return;
 	}
@@ -83,6 +84,9 @@ void Client::handleReadHeader() {
 	if (headerEnd != std::string::npos) {
 		// change state?
 		parseHeaders();
+		if (_clientState == WRITING_RESPONSE) {
+			return; // exit immediately so the error response can be sent
+		}
 		bool hasHost = false;
 		if (_request.getVersion() == "HTTP/1.1") {
 			std::map<std::string, std::string> headers = _request.getHeaders();
@@ -94,7 +98,7 @@ void Client::handleReadHeader() {
 			}
 			if (!hasHost) {
 				_response.setStatusCode(400); // 400 Bad Request strictly required for HTTP/1.1
-				setClientState(WRITING_RESPONSE);
+				finalizeResponse();
 				return;
 			}
 		}
@@ -126,6 +130,7 @@ void Client::handleReadBody() {
 		
 		if (bytesRead <= 0) {
 			// 0 means client closed connection; < 0 means read error
+			// handle error
 			_clientState = DONE;
 			return;
 		}
@@ -140,6 +145,28 @@ void Client::handleReadBody() {
 
 		_clientState = PROCESSING;
 	}
+}
+
+void Client::finalizeResponse() {
+	if (shouldKeepAlive()) {
+		_response.setHeader("Connection", "keep-alive");
+	} else {
+		_response.setHeader("Connection", "close");
+	}
+
+	std::ostringstream oss;
+	oss << _response.getBody().size();
+	_response.setHeader("Content-Length", oss.str());
+
+	setClientState(WRITING_RESPONSE);
+}
+
+void Client::resetForNextRequest() {
+	_request = HttpRequest();
+	_response = HttpResponse();
+	_writeBuffer.clear();
+	_bytesSent = 0;
+	_clientState = READING_HEADER;
 }
 
 void Client::handleProcessing() {
@@ -162,7 +189,7 @@ void Client::handleProcessing() {
 	if (matchedLocation == NULL) {
 		_response.setStatusCode(404);
 		// 404 page?
-		setClientState(WRITING_RESPONSE);
+		finalizeResponse();
 		return;
 	}
 
@@ -179,14 +206,14 @@ void Client::handleProcessing() {
 	if (!isAllowed) {
 		_response.setStatusCode(405);
 		// 405 method not allowed
-		setClientState(WRITING_RESPONSE);
+		finalizeResponse();
 		return;
 	}
 
 	if (_request.getContentLength() > _server.getClientMaxBodySize()) {
 		_response.setStatusCode(413);
 		// 413 Payload too large error
-		setClientState(WRITING_RESPONSE);
+		finalizeResponse();
 		return;
 	}
 
@@ -194,7 +221,7 @@ void Client::handleProcessing() {
 	if (!(redirect.first == 0 && redirect.second == "")) {
 		_response.setStatusCode(redirect.first); // check if it starts with 3?
 		_response.setHeader("Location", redirect.second);
-		setClientState(WRITING_RESPONSE);
+		finalizeResponse();
 		return;
 	}
 
@@ -228,18 +255,44 @@ void Client::handleProcessing() {
 			//the path does not exist on disc
 			_response.setStatusCode(404);
 		}
-	} 
+	}
+
+	
+
 	// construct responsehandleWriteResponse
 	if (!cgiFlag) {
-		setClientState(WRITING_RESPONSE);
+		finalizeResponse();
 	}
+}
+
+bool Client::shouldKeepAlive() const {
+	if (_response.getStatusCode() >= 400 && _response.getStatusCode() != 404 && _response.getStatusCode() != 405) {
+		return false;
+	}
+
+	std::map<std::string, std::string> headers = _request.getHeaders();
+	std::map<std::string, std::string>::const_iterator it = headers.find("connection");
+	std::string connVal = "";
+	if (it != headers.end()) {
+		connVal = it->second;
+	}
+
+	for (size_t i = 0; i < connVal.length(); ++i) {
+		connVal[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(connVal[i])));
+	}
+
+	if (_request.getVersion() == "HTTP/1.1") {
+		return (connVal != "close");
+	} else if (_request.getVersion() == "HTTP/1.0") {
+		return (connVal == "keep-alive");
+	}
+	return false;
 }
 
 
 void Client::handleWriteResponse() {
 	if(_bytesSent == 0 && _writeBuffer.empty()) {
 		std::vector<char> raw = _response.createResponse();
-
 		_writeBuffer.assign(raw.begin(), raw.end());
 	}
 	size_t remainingBytes = _writeBuffer.size() - _bytesSent;
@@ -253,7 +306,15 @@ void Client::handleWriteResponse() {
 	_bytesSent += bytesWritten;
 
 	if(_bytesSent >= _writeBuffer.size()) {
-		setClientState(DONE);
+		if (shouldKeepAlive()) {
+			resetForNextRequest(); // set state back to reading header and clears request/response
+
+			if (_readBuffer.find("\r\n\r\n") != std::string::npos) {
+				handleReadHeader();
+			}
+		} else {
+			setClientState(DONE);
+		}
 	}
 }
 
@@ -320,14 +381,14 @@ void Client::parseHeaders() {
 
 	if (!(iss >> method >> uri >> version)) {
 		_response.setStatusCode(400); // Bad Request
-		setClientState(WRITING_RESPONSE);
+		finalizeResponse();
 		return;
 	}
 
 	std::string extra;
 	if (iss >> extra) {
 		_response.setStatusCode(400);
-		setClientState(WRITING_RESPONSE);
+		finalizeResponse();
 		return;
 	}
 
@@ -337,7 +398,7 @@ void Client::parseHeaders() {
 		} else {
 			_response.setStatusCode(400); // 400 bad request
 		}
-		setClientState(WRITING_RESPONSE);
+		finalizeResponse();
 		return;
 	}
 	
@@ -348,7 +409,7 @@ void Client::parseHeaders() {
 	}
 	else {
 		_response.setStatusCode(505); // HTTP version not supported
-		setClientState(WRITING_RESPONSE);
+		finalizeResponse();
 		return;
 	}
 	_request.setRequestState(HttpRequest::PARSE_HEADERS);

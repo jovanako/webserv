@@ -37,6 +37,9 @@ private:
 	void handleReadBody();
 	void handleWriteResponse();
 	void handleCgiPipeWait();
+	bool shouldKeepAlive() const;
+	void finalizeResponse();
+	void resetForNextRequest();
 
 public:
 	Client();

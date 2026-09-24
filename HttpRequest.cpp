@@ -121,7 +121,7 @@ static bool isValidHeaderKey(const std::string& key) {
 }
 
 static bool isValidIpv4(const std::string& host) {
-    if (host.empty() || host[0] == '.' ||  host[host.length() - 1] != '.')
+    if (host.empty() || host[0] == '.' ||  host[host.length() - 1] == '.')
 		return false;
 
 	std::istringstream ss(host);

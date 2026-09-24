@@ -21,6 +21,9 @@ public:
 	HttpResponse& operator=(const HttpResponse& other);
     ~HttpResponse();
 
+	int getStatusCode() const;
+	std::vector<char> getBody() const;
+
     // Setters for generating the response
     void setStatusCode(int code);
     void setHeader(const std::string& key, const std::string& value);

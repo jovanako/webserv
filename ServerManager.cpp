@@ -21,7 +21,7 @@ ServerManager& ServerManager::operator=(const ServerManager& other) {
 
 ServerManager::~ServerManager() {}
 
-void ServerManager::acceptClient(int listenFd) {
+void ServerManager::acceptClient(int listenFd, std::vector<struct pollfd>& pendingFds) {
 	int clientFd = accept(listenFd, NULL, NULL); // check NULL if correct
 	if (clientFd < 0)
 		return; // handle error or EAGAIN
@@ -32,7 +32,8 @@ void ServerManager::acceptClient(int listenFd) {
 	pfd.fd = clientFd;
 	pfd.events = POLLIN;
 	pfd.revents = 0;
-	_pollFds.push_back(pfd);
+	
+	pendingFds.push_back(pfd);
 
 	Client client(clientFd);
 
@@ -47,7 +48,7 @@ void ServerManager::removeClient(int clientFd) {
 	_clients.erase(clientFd);
 	for (std::vector<struct pollfd>::iterator it = _pollFds.begin(); it != _pollFds.end(); ++it) {
 		if (it->fd == clientFd) {
-			_pollFds.erase(it);
+			_pollFds.erase(it); // check if ok
 			break;
 		}
 	}
@@ -106,8 +107,13 @@ void ServerManager::initServers() {
 }
 
 void ServerManager::run() {
+	std::vector<struct pollfd> pendingFds;
+
 	while (true) {
-		poll(&_pollFds[0], _pollFds.size(), -1);
+		if (poll(&_pollFds[0], _pollFds.size(), -1) < 0) {
+			// handle error
+			continue;
+		}
 		for (size_t i = 0; i < _pollFds.size(); ) {
 			
 			// skip if no events occured
@@ -119,7 +125,7 @@ void ServerManager::run() {
 			int currentFd = _pollFds[i].fd;
 
 			// catch unexpected disconnects and errors
-			if (_pollFds[i].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+			if (_pollFds[i].revents & (POLLERR | POLLNVAL)) {
 				removeClient(currentFd);
 				continue;
 			}
@@ -128,7 +134,7 @@ void ServerManager::run() {
 			std::map<int, ServerConfig*>::iterator serverIter = _listenSockets.find(_pollFds[i].fd);
 			if (serverIter != _listenSockets.end() && serverIter->second != NULL) {
 				if (_pollFds[i].revents & POLLIN) {
-					acceptClient(currentFd);
+					acceptClient(currentFd, pendingFds);
 				}
 				i++;
 				continue;
@@ -139,22 +145,36 @@ void ServerManager::run() {
 			if (clientIter != _clients.end()) {
 				Client& client = clientIter->second;
 
-				// 1. read incoming data if readable
+				// handle POLLHUP only if there's nodata left to read
+				if ((_pollFds[i].revents & POLLHUP) && !(_pollFds[i].revents & POLLIN)) {
+					removeClient(currentFd);
+					continue;
+				}
+
+				// read incoming data if readable
 				if (_pollFds[i].revents & POLLIN) {
 					client.handleRead();
 				}
 
-				// 2. perform route matching and preparation if reading is complete
+				// if read caused client disconnect / error, clean up immediately
+				if (client.getClientState() == Client::DONE) {
+					client.handleDone();
+					removeClient(currentFd);
+					continue;
+				}
+
+				// perform route matching and preparation if reading is complete
 				if (clientIter->second.getClientState() == Client::PROCESSING) {
 					clientIter->second.handleProcessing();
 				}
 
-				// 3. send response if socket is writable
-				if (_pollFds[i].revents & POLLOUT) {
+				// send response if socket is writable
+				if ((_pollFds[i].revents & POLLOUT) &&
+					(client.getClientState() == Client::WRITING_RESPONSE)) {
 					clientIter->second.handleWrite();
 				}
 
-				// 4. remove client if client requested termination or completed response
+				// remove client if client requested termination or completed response
 				Client::ConnectionState state = client.getClientState();
 
 				if (state == Client::DONE) {
@@ -171,6 +191,10 @@ void ServerManager::run() {
 				}
 			}
 			i++;
+		}
+		if (!pendingFds.empty()) {
+			_pollFds.insert(_pollFds.end(), pendingFds.begin(), pendingFds.end());
+			pendingFds.clear();
 		}
 	}
 }

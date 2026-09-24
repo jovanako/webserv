@@ -20,8 +20,8 @@ class ServerManager {
 		std::map<int, Client>		_clients;
 		std::map<int, ServerConfig*> _listenSockets;
 
-		void acceptClient(int listenFd);
-		void removeClient(int clientFd);
+		void acceptClient(int listenFd, std::vector<struct pollfd>& pendingFds);
+		void ServerManager::removeClient(int clientFd);
 		void initServers();
 	public:
 		ServerManager();
