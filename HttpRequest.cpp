@@ -311,7 +311,7 @@ void HttpRequest::addHeader(const std::string& key, const std::string& value) {
 		if (_headers.find("transfer-encoding") != _headers.end()) {
 			return handleError(*this, 400);
 		}
-		
+
 		if (value.empty()) {
 			return handleError(*this, 400);
 		}
@@ -324,10 +324,11 @@ void HttpRequest::addHeader(const std::string& key, const std::string& value) {
 
 		std::istringstream iss(value);
 		size_t len;
-		iss >> len;
+		if (!(iss >> len)) {
+			return handleError(*this, 400);
+		}
 		setContentLength(len);
-	}
-	
+	}	
 	
 	_headers[lowerKey] = value;
 	return;

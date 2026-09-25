@@ -72,6 +72,14 @@ void Client::handleReadHeader() {
 		if (_clientState == WRITING_RESPONSE) {
 			return; // exit immediately so the error response can be sent
 		}
+
+		if (_request.getContentLength() > _server.getClientMaxBodySize()) {
+			_response.setStatusCode(413);
+			// 413 Payload too large error
+			finalizeResponse();
+			return;
+		}
+
 		bool hasHost = false;
 		if (_request.getVersion() == "HTTP/1.1") {
 			std::map<std::string, std::string> headers = _request.getHeaders();
@@ -121,6 +129,12 @@ void Client::handleReadBody() {
 		}
 		_readBuffer.append(buf, bytesRead);
 	}
+
+	if (_readBuffer.length() > _server.getClientMaxBodySize()) {
+        _response.setStatusCode(413); // Payload Too Large
+        finalizeResponse();
+        return;
+    }
 
 	if (_readBuffer.length() >= contentLen) {
 		_request.appendBody(_readBuffer.data(), contentLen);
@@ -191,13 +205,6 @@ void Client::handleProcessing() {
 	if (!isAllowed) {
 		_response.setStatusCode(405);
 		// 405 method not allowed
-		finalizeResponse();
-		return;
-	}
-
-	if (_request.getContentLength() > _server.getClientMaxBodySize()) {
-		_response.setStatusCode(413);
-		// 413 Payload too large error
 		finalizeResponse();
 		return;
 	}
@@ -418,9 +425,14 @@ void Client::parseHeaders() {
 			// Trim leading spaces from the value (e.g., " localhost" -> "localhost")
 			size_t valueStart = value.find_first_not_of(" \t");
 			if (valueStart != std::string::npos) {
-				value = value.substr(valueStart);
+				size_t valueEnd = value.find_last_not_of(" \t");
+				value = value.substr(valueStart, valueEnd - valueStart + 1);
 			} else {
 				value.clear();
+			}
+
+			if (key == "Content-Length") {
+
 			}
 
 			_request.addHeader(key, value);
