@@ -10,8 +10,6 @@
 
 class Client {
 public:
-	static const size_t MAX_URI_LENGTH = 8192;
-
     enum ConnectionState {
         READING_HEADER,
         READING_BODY,

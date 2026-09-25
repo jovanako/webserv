@@ -107,16 +107,21 @@ void ServerManager::initServers() {
 }
 
 void ServerManager::run() {
+	// initialize a temporary container to hold newly accepted client file descriptors during the current polling cycle
 	std::vector<struct pollfd> pendingFds;
 
+	// begins the infinite event loop that keeps the server running continuously
 	while (true) {
+		// calls the poll() function to monitor all stored file descriptors
+		// blocking indefinitely (-1) until an I/O event occurs
 		if (poll(&_pollFds[0], _pollFds.size(), -1) < 0) {
 			// handle error
-			continue;
+			continue; // skips the rest of the loop iteration if poll() encounters an error, preventing server crash
 		}
 		for (size_t i = 0; i < _pollFds.size(); ) {
 			
-			// skip if no events occured
+			// checks if any events were returned (revents) for the current socket
+			// if none, it increments the index and moves to the next descriptor
 			if (_pollFds[i].revents == 0) {
 				i++;
 				continue;
@@ -124,15 +129,19 @@ void ServerManager::run() {
 
 			int currentFd = _pollFds[i].fd;
 
-			// catch unexpected disconnects and errors
+			// catches severe socket errors or invalid descriptors
+			// and immediately terminates the client connection, skipping further processing without incrementing i
 			if (_pollFds[i].revents & (POLLERR | POLLNVAL)) {
 				removeClient(currentFd);
 				continue;
 			}
 
-			// handle new connections (listening sockets)
-			std::map<int, ServerConfig*>::iterator serverIter = _listenSockets.find(_pollFds[i].fd);
+			// checks whether the active file descriptor belongs to a main listening server socket
+			std::map<int, ServerConfig*>::iterator serverIter = _listenSockets.find(currentFd);
+			// confirms that the descriptor is a valid initialized listening socket
 			if (serverIter != _listenSockets.end() && serverIter->second != NULL) {
+				// if a new connection request is waiting (POLLIN), it accepts the client 
+				// and pushes its descriptor into the temporary pendingFds vector
 				if (_pollFds[i].revents & POLLIN) {
 					acceptClient(currentFd, pendingFds);
 				}

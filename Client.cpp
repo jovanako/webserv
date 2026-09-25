@@ -52,21 +52,6 @@ static bool isHostHeader(std::string key) {
 	return key == "host";
 }
 
-static bool isValidUri(const std::string& uri) {
-	if (uri.empty() || uri[0] != '/')
-		return false;
-	if (uri.length() > Client::MAX_URI_LENGTH)
-		return false;
-
-	for (size_t i = 0; i < uri.length(); ++i) {
-		unsigned char c = static_cast<unsigned char>(uri[i]);
-		// don't allow spaces, control chars, and non-ASCII bytes
-		if (c <= 32 || c >= 127)
-			return false;
-	}
-	return true;
-}
-
 void Client::handleReadHeader() {
 	char buf[BUFFER_SIZE];
 	ssize_t bytesRead = recv(_socketFd, buf, sizeof(buf), 0);
@@ -391,27 +376,25 @@ void Client::parseHeaders() {
 		finalizeResponse();
 		return;
 	}
-
-	if (!isValidUri(uri)) {
-		if (uri.length() > MAX_URI_LENGTH) {
-			_response.setStatusCode(414); // 414 uri too long
-		} else {
-			_response.setStatusCode(400); // 400 bad request
-		}
-		finalizeResponse();
-		return;
-	}
 	
 	_request.setMethod(method);
 	_request.setUri(uri);
+
 	if (version == "HTTP/1.0" || version == "HTTP/1.1") {
 		_request.setVersion(version);
 	}
 	else {
 		_response.setStatusCode(505); // HTTP version not supported
+		_request.setRequestState(HttpRequest::PARSE_ERROR);
+		return;
+	}
+
+	if (_request.getRequestState() == HttpRequest::PARSE_ERROR) {
+		_response.setStatusCode(_request.getErrorCode());
 		finalizeResponse();
 		return;
 	}
+
 	_request.setRequestState(HttpRequest::PARSE_HEADERS);
 
 	// 3. Parse the headers line by line
@@ -441,6 +424,12 @@ void Client::parseHeaders() {
 			}
 
 			_request.addHeader(key, value);
+			
+			if (_request.getRequestState() == HttpRequest::PARSE_ERROR) {
+				_response.setStatusCode(_request.getErrorCode());
+				finalizeResponse();
+				return;
+			}
 		}
 
 		// Move to the next line

@@ -6,9 +6,12 @@
 #include <vector>
 #include <sstream>
 #include <cctype>
+#include <unistd.h>
 
 class HttpRequest {
 public:
+	static const size_t MAX_URI_LENGTH = 8192;
+
     enum ParsingState {
         PARSE_REQUEST_LINE,
         PARSE_HEADERS,

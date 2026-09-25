@@ -44,7 +44,51 @@ void HttpRequest::setMethod(const std::string& method) {
 }
 
 void HttpRequest::setUri(const std::string& uri) {
-	_uri = uri; // check validity
+	// absolute path requirement
+	if (uri.empty() || uri[0] != '/') {
+		_errorCode = 400; // Bad request
+		_parseState = PARSE_ERROR;
+		return;
+	}
+	
+	// length limits
+	if (uri.length() > MAX_URI_LENGTH) {
+		_errorCode = 414; // uri too long
+		_parseState = PARSE_ERROR;
+		return;
+	}
+
+	// path traversal / security
+	// Block sequences that allow directory climbing: "/../", ending with "/..", or before queries "/..?"
+	if (uri.find("/../") != std::string::npos
+		|| (uri.length() >= 3 && uri.substr(uri.length() - 3) == "/..")
+		|| uri.find("/..?") != std::string::npos) {
+			_errorCode = 403; // forbidden
+			_parseState = PARSE_ERROR;
+			return;
+	}
+
+	// illegal characters & percent-encoding validation
+	for (size_t i = 0; i < uri.length(); ++i) {
+		unsigned char c = static_cast<unsigned char>(uri[i]);
+		if (c <= 32 || c >= 127) {
+            _errorCode = 400; // Bad Request
+            _parseState = PARSE_ERROR;
+            return;
+		}
+
+		if (c == '%') {
+			if (i + 2 >= uri.length()
+				|| !std::isxdigit(static_cast<unsigned char> (uri[i + 1]))
+				|| !std::isxdigit(static_cast<unsigned char> (uri[i + 2]))) {
+					_errorCode = 400;
+					_parseState = PARSE_ERROR;
+					return;
+			}
+			i += 2;
+		}
+	}
+	_uri = uri;
 }
 
 void HttpRequest::setVersion(const std::string& version) {
