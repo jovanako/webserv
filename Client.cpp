@@ -91,7 +91,7 @@ void Client::handleReadHeader() {
 		_readBuffer.erase(0, headerEnd + 4);
 
 		// If there is a body, handle it
-		if (_request.getContentLength() > 0) {
+		if (_request.getContentLength() > 0 || _request.isChunked()) {
 			_clientState = READING_BODY;
 			
 			// If we have already read part of the body
@@ -424,7 +424,7 @@ void Client::parseHeaders() {
 			}
 
 			_request.addHeader(key, value);
-			
+
 			if (_request.getRequestState() == HttpRequest::PARSE_ERROR) {
 				_response.setStatusCode(_request.getErrorCode());
 				finalizeResponse();

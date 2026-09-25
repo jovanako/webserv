@@ -21,36 +21,36 @@ public:
     };
 
 private:
-    ParsingState                        _parseState;
-    std::string                         _method;
-    std::string                         _uri;
-    std::string                         _version;
-    std::map<std::string, std::string>  _headers;
-    std::vector<char>                   _body;
-    size_t                              _contentLength;
-    int                                 _errorCode;
+    ParsingState _parseState;
+    std::string _method;
+    std::string _uri;
+    std::string _version;
+    std::map<std::string, std::string> _headers;
+    std::vector<char> _body;
+    size_t _contentLength;
+    int _errorCode;
+	bool _isChunked;
 
 public:
     HttpRequest();
 	HttpRequest(const HttpRequest& other);
 	HttpRequest& operator=(const HttpRequest& other);
     ~HttpRequest();
-
-    // State and parsing helpers
-    ParsingState getRequestState() const;
+	
+    // Setters for building the request during parsing
     void setRequestState(ParsingState state);
     void setErrorCode(int code);
-    int getErrorCode() const;
-
-    // Setters for building the request during parsing
     void setMethod(const std::string& method);
     void setUri(const std::string& uri);
     void setVersion(const std::string& version);
+    void setContentLength(size_t len);
     void addHeader(const std::string& key, const std::string& value);
     void appendBody(const char* data, size_t size);
-    void setContentLength(size_t len);
 
-    // Getters for routing and processing
+    // Getters
+	ParsingState getRequestState() const;
+    int getErrorCode() const;
+	bool isChunked() const;
     const std::string&                  getMethod() const;
     const std::string&                  getUri() const;
     const std::string&                  getVersion() const;

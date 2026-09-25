@@ -3,7 +3,8 @@
 HttpRequest::HttpRequest()
 	: _parseState(PARSE_REQUEST_LINE),
 	  _contentLength(0),
-	  _errorCode(0) {}
+	  _errorCode(0),
+	  _isChunked(false) {}
 
 HttpRequest::HttpRequest(const HttpRequest& other) {
 	*this = other;
@@ -19,6 +20,7 @@ HttpRequest& HttpRequest::operator=(const HttpRequest& other){
 		_body = other._body;
 		_contentLength = other._contentLength;
 		_errorCode = other._errorCode;
+		_isChunked = other._isChunked;
 	}
 	return *this;
 }
@@ -105,12 +107,16 @@ void HttpRequest::setContentLength(size_t len) {
 }
 
 // Getters
+HttpRequest::ParsingState HttpRequest::getRequestState() const {
+	return _parseState;
+}
+
 int HttpRequest::getErrorCode() const {
 	return _errorCode;
 }
 
-HttpRequest::ParsingState HttpRequest::getRequestState() const {
-	return _parseState;
+bool HttpRequest::isChunked() const {
+	return _isChunked;
 }
 
 const std::string& HttpRequest::getMethod() const {
@@ -137,8 +143,8 @@ size_t HttpRequest::getContentLength() const {
 	return _contentLength;
 }
 
-static void handleError(HttpRequest& request) {
-	request.setErrorCode(400);
+static void handleError(HttpRequest& request, int code) {
+	request.setErrorCode(code);
 	request.setRequestState(HttpRequest::PARSE_ERROR);
 	return;
 }
@@ -268,7 +274,7 @@ static bool isValidHost(const std::string& hostHeaderValue) {
 
 void HttpRequest::addHeader(const std::string& key, const std::string& value) {
 	if (!isValidHeaderKey(key)) {
-		return handleError(*this);
+		return handleError(*this, 400);
 	}
 	std::string lowerKey = key;
 	for (size_t i = 0; i < lowerKey.length(); ++i) {
@@ -278,22 +284,41 @@ void HttpRequest::addHeader(const std::string& key, const std::string& value) {
 	// reject if host, content-length or transfer-encoding have duplicates
 	if (lowerKey == "host" || lowerKey == "content-length" || lowerKey == "transfer-encoding") {
 		if(_headers.find(lowerKey) != _headers.end()) {
-			return handleError(*this);
+			return handleError(*this, 400);
 		}
 	}
 
 	if (lowerKey == "host" && !isValidHost(value)) {
-		return handleError(*this);
+		return handleError(*this, 400);
+	}
+
+	if (lowerKey == "transfer-encoding") {
+		if (_headers.find("content-length") != _headers.end()) {
+			return handleError(*this, 400);
+		}
+
+		std::string lowerVal = value;
+		for (size_t i = 0; i < lowerVal.length(); ++i) {
+			lowerVal[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(lowerVal[i])));
+		}
+		if (lowerVal != "chunked") {
+			return handleError(*this, 501); // not implemented
+		}
+		_isChunked = true;
 	}
 
 	if (lowerKey == "content-length") {
+		if (_headers.find("transfer-encoding") != _headers.end()) {
+			return handleError(*this, 400);
+		}
+		
 		if (value.empty()) {
-			return handleError(*this);
+			return handleError(*this, 400);
 		}
 
 		for (size_t i = 0; i < value.length(); ++i) {
 			if (!std::isdigit(static_cast<unsigned char>(value[i]))) {
-				return handleError(*this);
+				return handleError(*this, 400);
 			}
 		}
 
@@ -302,6 +327,7 @@ void HttpRequest::addHeader(const std::string& key, const std::string& value) {
 		iss >> len;
 		setContentLength(len);
 	}
+	
 	
 	_headers[lowerKey] = value;
 	return;
