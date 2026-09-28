@@ -13,17 +13,17 @@ private:
     std::map<std::string, std::string>  _headers;
     std::vector<char>                   _body;
 
-    std::string getStatusMessage(int code) const;
-
-public:
+	
+	public:
     HttpResponse();
 	HttpResponse(const HttpResponse& other);
 	HttpResponse& operator=(const HttpResponse& other);
     ~HttpResponse();
-
+	
 	int getStatusCode() const;
+    std::string getStatusMessage(int code) const;
 	std::vector<char> getBody() const;
-
+	
     // Setters for generating the response
     void setStatusCode(int code);
     void setHeader(const std::string& key, const std::string& value);

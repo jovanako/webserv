@@ -7,6 +7,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <fstream>
+#include <dirent.h>
 
 class Client {
 public:
@@ -36,6 +38,7 @@ private:
 	void handleWriteResponse();
 	void handleCgiPipeWait();
 	bool shouldKeepAlive() const;
+	void buildErrorResponse(int statusCode);
 	void finalizeResponse();
 	void resetForNextRequest();
 

@@ -146,6 +146,41 @@ void Client::handleReadBody() {
 	}
 }
 
+void Client::buildErrorResponse(int statusCode) {
+	_response.setStatusCode(statusCode);
+
+	std::string body;
+	bool loadedFromFile = false;
+
+	const std::map<int, std::string>& errorPages = _server.getErrorPages();
+	std::map<int, std::string>::const_iterator it = errorPages.find(statusCode);
+
+	if (it != errorPages.end()) {
+		std::string filePath = it->second;
+		// prepend root or server path if needed
+		std::ifstream file(filePath.c_str(), std::ios::in | std::ios::binary);
+		if (file.is_open()) {
+			std::ostringstream ss;
+			ss << file.rdbuf();
+			body = ss.str();
+			loadedFromFile = true;
+		}
+	}
+	if (!loadedFromFile) {
+        std::ostringstream ss;
+        ss << "<!DOCTYPE html><html><head><title>" << statusCode << " " 
+           << _response.getStatusMessage(statusCode)
+           << "</title></head><body><center><h1>" << statusCode << " " 
+           << _response.getStatusMessage(statusCode)
+           << "</h1></center><hr><center>webserv</center></body></html>";
+        body = ss.str();
+    }
+
+	_response.setHeader("Content-Type", "text/html");
+	_response.setBody(body);
+	finalizeResponse();
+}
+
 void Client::finalizeResponse() {
 	if (shouldKeepAlive()) {
 		_response.setHeader("Connection", "keep-alive");
@@ -232,14 +267,48 @@ void Client::handleProcessing() {
 	}
 
 	if (method == "GET") {
-		std::string fullPath = matchedLocation->getRoot() + uri;
-		struct stat path_stat;
-		if (stat(fullPath.c_str(), &path_stat) == 0) {
-			if (S_ISDIR(path_stat.st_mode)) {
-				bool autoindex = matchedLocation->getAutoindex();
-				// handle directory logic
+		std::string path = matchedLocation->getPath();
+		std::string strippedUri = uri.substr(path.length());
+
+		std::string fullPath = matchedLocation->getRoot();
+
+		if (!fullPath.empty() && fullPath[fullPath.length() - 1] == '/') {
+			fullPath.erase(fullPath.length() - 1);
+		}
+		if (strippedUri.empty() || strippedUri[0] != '/') {
+			fullPath += "/";
+		}
+		fullPath += strippedUri;
+
+		struct stat pathStat;
+		// check if file exists
+		if (stat(fullPath.c_str(), &pathStat) == 0) {
+			// check if it's a directory
+			if (S_ISDIR(pathStat.st_mode)) {
+				// enforce trailing slash on the URI
+				if (!uri.empty() && uri[uri.length() - 1] != '/') {
+					_response.setStatusCode(301); // Moved Permanently
+					_response.setHeader("Location", uri + "/");
+					finalizeResponse();
+					return;
+				}
+				// search for an index file
+				bool indexFound = false;
+				const std::vector<std::string>& indices = matchedLocation->getIndex();
+				for (size_t i = 0; i < indices.size(); ++i) {
+					std::string indexPath = fullPath + indices[i];
+					struct stat indexStat;
+
+					if (stat(indexPath.c_str(), &indexStat) == 0 && S_ISREG(indexStat.st_mode)) {
+						fullPath = indexPath;
+						pathStat = indexStat;
+						indexFound = true;
+						break;
+					}
+				}
+				// handle autoindex or 403 if no idex file was found
 			}
-			else if (S_ISREG(path_stat.st_mode)) {
+			else if (S_ISREG(pathStat.st_mode)) {
 				// read the file and serve it
 			}
 		}

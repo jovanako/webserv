@@ -1,0 +1,6 @@
+{
+  "server": "webserv",
+  "version": "1.0",
+  "status": "online",
+  "message": "Static JSON payload served successfully!"
+}
