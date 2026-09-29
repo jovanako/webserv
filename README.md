@@ -530,8 +530,13 @@ struct pollfd {
 };
 ```
 
-Field Breakdown
-fd: The raw integer file descriptor (such as a master listening socket or an active client connection) that you are registering for the event loop. If you set this to a negative number, poll() safely ignores this specific array entry.  events: A bitmask where you tell the kernel exactly what to look for. In webserv, you will dynamically swap this between POLLIN (when you want to read an incoming HTTP request) and POLLOUT (when you are ready to write the HTTP response).  revents: The kernel automatically overwrites this field right before the poll() function returns to your program. It contains the result, allowing you to check if POLLIN or POLLOUT actually triggered, or if unexpected error events like POLLHUP (client disconnected unexpectedly) occurred.
+### Field Breakdown
+
+- **fd:** The raw integer file descriptor (such as a master listening socket or an active client connection) that you are registering for the event loop. If you set this to a negative number, poll() safely ignores this specific array entry.
+
+- **events:** A bitmask where you tell the kernel exactly what to look for. In webserv, you will dynamically swap this between POLLIN (when you want to read an incoming HTTP request) and POLLOUT (when you are ready to write the HTTP response).
+
+- **revents:** The kernel automatically overwrites this field right before the poll() function returns to your program. It contains the result, allowing you to check if POLLIN or POLLOUT actually triggered, or if unexpected error events like POLLHUP (client disconnected unexpectedly) occurred.
 
 ### Next Steps & Logic Implementation
 
@@ -542,3 +547,19 @@ fd: The raw integer file descriptor (such as a master listening socket or an act
 - **CGI Execution**: For your fork() and execve() TO-DO, remember to transition the client state to CGI_PIPE_WAIT rather than WRITING_RESPONSE so the main poll loop can safely monitor the pipes without blocking the server.
 
 >Check how HTTP version impacts things
+
+## `opendir()`
+
+`opendir()` is the function that initializes the process of reading a directory's contents. It takes a folder path as an argument (like `"/var/www/uploads/"`) and asks the operating system to open a stream to read what is inside that folder.
+
+If successful, it returns a pointer to a `DIR` object (`DIR*`). If it fails (for example, if the path doesn't exist or you lack read permissions), it returns `NULL`.
+
+Here is exactly how `DIR` and `opendir()` drive the `autoindex` feature:
+
+- **Opening the Stream:** When a user requests a directory, your config has `autoindex on;`, and no `index.html` is found, you call `DIR* dir = opendir(fullPath.c_str());`. This gives you the `DIR` handle to start exploring the folder.
+
+- **Iterating with `readdir()`:** You pass this `DIR*` handle into a `while` loop using `readdir(dir)`. Each time `readdir()` is called, it advances the stream and returns a pointer to a `struct dirent`, which contains information about a single file or subfolder (most importantly, its name via `entry->d_name`).
+
+- **Building the HTML:** Inside that loop, you extract the names of the files and append them to a dynamically growing HTML string, wrapping each name in standard HTML anchor tags (`<a href="...">`) so they appear as clickable links in the browser.
+
+- **Closing the Stream:** Once `readdir()` returns `NULL` (meaning you have reached the end of the directory), the loop ends. You must then call `closedir(dir)` to release the system resources associated with the `DIR` handle.

@@ -37,26 +37,27 @@ public:
 	HttpRequest& operator=(const HttpRequest& other);
     ~HttpRequest();
 	
-    // Setters for building the request during parsing
+    // Setters
     void setRequestState(ParsingState state);
-    void setErrorCode(int code);
     void setMethod(const std::string& method);
     void setUri(const std::string& uri);
     void setVersion(const std::string& version);
     void setContentLength(size_t len);
-    void addHeader(const std::string& key, const std::string& value);
-    void appendBody(const char* data, size_t size);
+    void setErrorCode(int code);
 
     // Getters
 	ParsingState getRequestState() const;
+    const std::string& getMethod() const;
+    const std::string& getUri() const;
+    const std::string& getVersion() const;
+    const std::map<std::string, std::string>& getHeaders() const;
+    const std::vector<char>& getBody() const;
+    size_t getContentLength() const;
     int getErrorCode() const;
 	bool isChunked() const;
-    const std::string&                  getMethod() const;
-    const std::string&                  getUri() const;
-    const std::string&                  getVersion() const;
-    const std::map<std::string, std::string>& getHeaders() const;
-    const std::vector<char>&            getBody() const;
-    size_t                              getContentLength() const;
+
+	void addHeader(const std::string& key, const std::string& value);
+    void appendBody(const char* data, size_t size);
 };
 
 #endif

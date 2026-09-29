@@ -292,6 +292,7 @@ void HttpRequest::addHeader(const std::string& key, const std::string& value) {
 		return handleError(*this, 400);
 	}
 
+	// a single HTTP request cannot contain both a Content-Length header and a Transfer-Encoding header
 	if (lowerKey == "transfer-encoding") {
 		if (_headers.find("content-length") != _headers.end()) {
 			return handleError(*this, 400);
@@ -301,6 +302,7 @@ void HttpRequest::addHeader(const std::string& key, const std::string& value) {
 		for (size_t i = 0; i < lowerVal.length(); ++i) {
 			lowerVal[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(lowerVal[i])));
 		}
+		// transfer-encoding can have other unsupported values
 		if (lowerVal != "chunked") {
 			return handleError(*this, 501); // not implemented
 		}
