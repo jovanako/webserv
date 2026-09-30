@@ -56,6 +56,30 @@ void HttpRequest::setMethod(const std::string& method) {
 	}
 }
 
+
+/*
+static std::string decodePercentEncoding(const std::string& input) {
+	std::string decoded;
+
+	for (size_t i = 0; i < input.length(); ++i) {
+		if (input[i] == '%') {
+			std::string hexStr = input.substr(i + 1, 2);
+
+			int value;
+			std::stringstream iss(hexStr);
+			if (iss >> std::hex >> value) {
+				decoded += static_cast<char>(value);
+			}
+			i += 2; // skip over the two hex digits we just processed
+		} else {
+			decoded += input[i]; // normal character, just append it 
+		}
+	}
+	return decoded;
+}
+*/
+
+
 void HttpRequest::setUri(const std::string& uri) {
 	// absolute path requirement
 	if (uri.empty() || uri[0] != '/') {
@@ -101,14 +125,22 @@ void HttpRequest::setUri(const std::string& uri) {
 			i += 2;
 		}
 	}
-	// size_t queryPos = uri.find('?');
-	// if (queryPos != std::string::npos) {
-	// 	_uri = uri.substr(0, queryPos);
-	// 	_queryString = uri.substr(queryPos + 1);
-	// } else {
-	// 	_uri = uri;
-	// 	_queryString = "";
-	// }
+	// split the validated URI into Path and Query String, then decode
+	/*
+	size_t queryPos = uri.find('?');
+	if (queryPos != std::string::npos) {
+		std::string rawUri = uri.substr(0, queryPos);
+		std::string rawQuery = uri.substr(queryPos + 1);
+
+		// decode both parts before saving them to the class variables
+		_uri = decodePercentEncoding(rawUri);
+		_queryString = decodePercentEncoding(rawQuery);
+	} else {
+		// no query string, just decode the whole path
+		_uri = decodePercentEncoding(uri);
+		_queryString = "";
+	}
+	*/
 	_uri = uri;
 }
 
