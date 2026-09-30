@@ -15,6 +15,7 @@ HttpRequest& HttpRequest::operator=(const HttpRequest& other){
 		_parseState = other._parseState;
 		_method = other._method;
 		_uri = other._uri;
+		// _queryString = other._queryString;
 		_version = other._version;
 		_headers = other._headers;
 		_body = other._body;
@@ -58,7 +59,7 @@ void HttpRequest::setMethod(const std::string& method) {
 void HttpRequest::setUri(const std::string& uri) {
 	// absolute path requirement
 	if (uri.empty() || uri[0] != '/') {
-		_errorCode = 400; // Bad request
+		_errorCode = 400; // bad request
 		_parseState = PARSE_ERROR;
 		return;
 	}
@@ -100,6 +101,14 @@ void HttpRequest::setUri(const std::string& uri) {
 			i += 2;
 		}
 	}
+	// size_t queryPos = uri.find('?');
+	// if (queryPos != std::string::npos) {
+	// 	_uri = uri.substr(0, queryPos);
+	// 	_queryString = uri.substr(queryPos + 1);
+	// } else {
+	// 	_uri = uri;
+	// 	_queryString = "";
+	// }
 	_uri = uri;
 }
 
