@@ -222,7 +222,7 @@ void Client::handleProcessing() {
 	}
 	if (matchedLocation == NULL) {
 		_response.setStatusCode(404);
-		// 404 page?
+		buildErrorResponse(404); // !!! added 404 not found
 		finalizeResponse();
 		return;
 	}
@@ -239,13 +239,13 @@ void Client::handleProcessing() {
 
 	if (!isAllowed) {
 		_response.setStatusCode(405);
-		// 405 method not allowed
+		buildErrorResponse(405); // !!! added 405 method not allowed
 		finalizeResponse();
 		return;
 	}
 
 	const std::pair<int, std::string> redirect = matchedLocation->getRedirect();
-	if (!(redirect.first == 0 && redirect.second == "")) {
+	if (redirect.first != 0 && redirect.second != "") {
 		_response.setStatusCode(redirect.first); // check if it starts with 3?
 		_response.setHeader("Location", redirect.second);
 		finalizeResponse();
