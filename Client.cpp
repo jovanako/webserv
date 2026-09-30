@@ -151,6 +151,7 @@ void Client::buildErrorResponse(int statusCode) {
 
 	std::string body;
 	bool loadedFromFile = false;
+	std::string mimeType = "text/html";
 
 	const std::map<int, std::string>& errorPages = _server.getErrorPages();
 	std::map<int, std::string>::const_iterator it = errorPages.find(statusCode);
@@ -164,6 +165,7 @@ void Client::buildErrorResponse(int statusCode) {
 			ss << file.rdbuf();
 			body = ss.str();
 			loadedFromFile = true;
+			mimeType = getMimeType(filePath);
 		}
 	}
 	if (!loadedFromFile) {
@@ -176,7 +178,7 @@ void Client::buildErrorResponse(int statusCode) {
         body = ss.str();
     }
 
-	_response.setHeader("Content-Type", "text/html");
+	_response.setHeader("Content-Type", mimeType);
 	_response.setBody(body);
 	finalizeResponse();
 }
@@ -201,6 +203,76 @@ void Client::resetForNextRequest() {
 	_writeBuffer.clear();
 	_bytesSent = 0;
 	_clientState = READING_HEADER;
+}
+
+std::string generateAutoindex(const std::string& fullPath, const std::string& requestUri) {
+	DIR* dir = opendir(fullPath.c_str());
+	if(dir == NULL) {
+		return (""); //this will be a 403
+	}
+
+	//skeleton of HTML
+	std::ostringstream html;
+	html << "<!DOCTYPE html>\n"
+         << "<html>\n<head>\n<title>Index of " << requestUri << "</title>\n</head>\n<body>\n"
+         << "<h1>Index of " << requestUri << "</h1>\n<hr>\n<pre>\n";
+		 
+	//might change baseUri soo cant use requestURI - Ensuring trailing slash 
+	std::string baseUri = requestUri;
+	if(!baseUri.empty() && baseUri[baseUri.length() - 1] != '/') {
+		baseUri += "/";
+	}
+
+	struct dirent* entry;
+	entry = readdir(dir);
+	while(entry != NULL)
+	{
+		std::string filename = entry->d_name;
+		//absolute path
+		std::string href = baseUri + filename;
+		//make it a link
+		html << "<a href=\"" << href << "\">" << filename << "</a>\n";
+		entry = readdir(dir);
+	}
+	closedir(dir);
+	html << "</pre>\n<hr>\n</body>\n</html>";
+
+	return html.str();
+}
+
+static std::string getMimeType(const std::string& path) {
+	// find the last dot and the last slash
+	size_t dotPos = path.find_last_of('.');
+	size_t slashPos = path.find_last_of('/');
+
+	// if there is no dot or the dot is part of a folder name
+	if (dotPos == std::string::npos || (slashPos != std::string::npos && dotPos <slashPos)) {
+		return "application/octet-stream";
+	}
+
+	// extract the extension
+	std::string ext = path.substr(dotPos);
+
+	// convert extension to lowercase to handle ".PNG" or ".Html" safely
+	for (size_t i = 0; i < ext.length(); ++i) {
+		ext[i] =static_cast<char>(std::tolower(static_cast<unsigned char>(ext[i])));
+	}
+
+	// Map common extensions
+    if (ext == ".html" || ext == ".htm") return "text/html";
+    if (ext == ".css") return "text/css";
+    if (ext == ".js") return "application/javascript";
+    if (ext == ".json") return "application/json";
+    if (ext == ".png") return "image/png";
+    if (ext == ".jpg" || ext == ".jpeg") return "image/jpeg";
+    if (ext == ".gif") return "image/gif";
+    if (ext == ".ico") return "image/x-icon";
+    if (ext == ".txt") return "text/plain";
+    if (ext == ".pdf") return "application/pdf";
+
+	// fallback for anything else
+	return "application/octet-stream";
+
 }
 
 void Client::handleProcessing() {
@@ -288,13 +360,13 @@ void Client::handleProcessing() {
 		struct stat pathStat;
 		// check if file exists
 		if (stat(fullPath.c_str(), &pathStat) == 0) {
+			bool isFileToServe = false;
 			// check if it's a directory
 			if (S_ISDIR(pathStat.st_mode)) {
 				// enforce trailing slash on the URI
 				if (!uri.empty() && uri[uri.length() - 1] != '/') {
-					_response.setStatusCode(301); // Moved Permanently
 					_response.setHeader("Location", uri + "/");
-					finalizeResponse();
+					buildErrorResponse(301); // moved permanently
 					return;
 				}
 				// search for an index file
@@ -311,19 +383,71 @@ void Client::handleProcessing() {
 						break;
 					}
 				}
-				// handle autoindex or 403 if no idex file was found
+				if (!indexFound) {
+					if (!(matchedLocation->getAutoindex())) {
+						buildErrorResponse(403);
+						return;
+					} else {
+						std::string htmlBody = generateAutoindex(fullPath, uri);
+
+						// opendir failed (likely due to permissions)
+						if (htmlBody.empty()) {
+							buildErrorResponse(403);
+							return;
+						}
+						// successfully generated the listing; set the response data
+						_response.setStatusCode(200);
+						_response.setBody(htmlBody);
+
+						std::ostringstream lengthStream;
+						lengthStream << htmlBody.length();
+
+						_response.setHeader("Content-Type", "text/html");
+						_response.setHeader("Content-Length", lengthStream.str());
+						return;
+						//ToDo build and sebd response
+					}
+				} else {
+					isFileToServe = true;
+				}
 			}
 			else if (S_ISREG(pathStat.st_mode)) {
-				// read the file and serve it
+				isFileToServe = true;
+			}
+			if (isFileToServe) {
+				
+				// std::ios::in mode flag telling the stream to open file for reading (input)
+				// std::ios::binary mode flag that forces C++ to read the file byte-by-byte (not in text mode)
+				std::ifstream file(fullPath.c_str(), std::ios::in | std::ios::binary);
+
+				if (!file.is_open()) {
+					buildErrorResponse(403);
+					return;
+				}
+
+				std::ostringstream ss;
+				ss << file.rdbuf();
+				std::string fileContent = ss.str();
+				file.close();
+
+				_response.setStatusCode(200);
+				_response.setBody(fileContent);
+
+				std::ostringstream lengthStream;
+				lengthStream << fileContent.length();
+				_response.setHeader("Content-Length", lengthStream.str());
+				// mime-type logic
+				std::string mimeType = getMimeType(fullPath);
+				_response.setHeader("Content-Type", mimeType);
+
 			}
 		}
 		else {
 			//the path does not exist on disc
-			_response.setStatusCode(404);
+			buildErrorResponse(404);
+			return;
 		}
 	}
-
-	
 
 	// construct responsehandleWriteResponse
 	if (!cgiFlag) {
@@ -405,32 +529,6 @@ void Client::handleWrite() {
 		handleWriteResponse();
 	}
 }
-
-// void Client::handleEvent() {
-// 	switch(_clientState)
-// 	{
-// 		case READING_HEADER :
-// 			handleReadHeader();
-// 			break;
-// 		case READING_BODY :
-// 			handleReadBody();
-// 			break;
-// 		case PROCESSING :
-// 			handleProcessing();
-// 			break;
-// 		case WRITING_RESPONSE :
-// 			handleWriteResponse();
-// 			break;
-// 		case CGI_PIPE_WAIT :
-// 			handleCgiPipeWait();
-// 			break;
-// 		case DONE :
-// 			handleDone();
-// 			break;
-// 		default:
-// 			break;
-// 	}
-// }
 
 void Client::parseHeaders() {
 	// 1. Find the end of the first line

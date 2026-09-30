@@ -91,7 +91,12 @@ std::vector<char> HttpResponse::createResponse() const {
     std::vector<char> response;
 
     // 1. Status Line (e.g., "HTTP/1.1 200 OK\r\n")
-    std::string version = _version.empty() ? "HTTP/1.0" : _version;
+    std::string version;
+    if (_version.empty()) {
+        version = "HTTP/1.0"; 
+    } else {
+        version = _version;
+    }
     
     // C++98 compliant integer-to-string conversion
     std::ostringstream oss;
@@ -102,7 +107,6 @@ std::vector<char> HttpResponse::createResponse() const {
     response.insert(response.end(), statusLine.begin(), statusLine.end());
 
     // 2. Headers (e.g., "Content-Type: text/html\r\n")
-    // C++98 compliant iterator loop (auto and range-based loops are forbidden)
     for (std::map<std::string, std::string>::const_iterator it = _headers.begin(); it != _headers.end(); ++it) {
         std::string headerLine = it->first + ": " + it->second + "\r\n";
         response.insert(response.end(), headerLine.begin(), headerLine.end());

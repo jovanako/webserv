@@ -38,27 +38,27 @@ private:
 	void handleWriteResponse();
 	void handleCgiPipeWait();
 	bool shouldKeepAlive() const;
-	void buildErrorResponse(int statusCode);
 	void finalizeResponse();
 	void resetForNextRequest();
-
-public:
+	
+	public:
 	Client();
     Client(int fd);
 	Client(const Client& other);
 	Client& operator=(const Client& other);
     ~Client();
-
+	
     ConnectionState getClientState() const;
     void setClientState(ConnectionState state);
 	void setServer(const ServerConfig& server);
-
+	
 	void handleRead();
 	void handleWrite();
 	void handleProcessing();
 	void handleDone();
     
 	void parseHeaders();
+	void buildErrorResponse(int statusCode);
 };
 
 #endif

@@ -118,3 +118,29 @@ Rejects leading zeroes because they can be dangerously misinterpreted by some sy
 - `my web.com` (spaces are forbidden)
 - `webserv_site.com` (underscores are forbidden in standard hostnames)
 - `999.1.2.3` (all-numeric final label, which makes it an invalid IP rather than a valid domain)
+
+# `std::istringstream` vs. `std::ostringstream`
+
+Use `std::istringstream` when you need to read from or parse an existing string, and use `std::ostringstream` when you need to write to or construct a new string.
+
+## `std::istringstream` (Input String Stream)
+
+- **Purpose:** Extracts structured data (like integers, floats, or individual words) out of a raw string. It behaves like `std::cin`, but reads from a string variable in memory rather than user input.
+
+- **Best For:** Splitting sentences by spaces, tokenizing data, or safely converting a string into a numeric type.
+
+## `std::ostringstream` (Output String Stream)
+
+- **Purpose:** Assembles various data types (strings, integers, characters) into a single formatted string. It behaves like `std::cout`, but writes to a string in memory rather than printing to the console.
+
+- **Best For:** Generating complex text outputs (like HTML or JSON), dynamically building file paths, or converting numbers into strings (which is especially necessary in C++98 where `std::to_string` is unavailable).
+
+# `>>` vs. `<<`
+
+- **Use `>>` (Extraction/Input) to read data.**\
+The arrows point *towards* your variables. Data flows out of the stream (like `std::cin` or `istringstream`) and into your code.\
+*Example:* `iss >> myVariable;` (Data moves from `iss` into `myVariable`).
+
+- **Use `<<` (Insertion/Output) to write data.**\
+The arrows point *towards* the stream. Data flows out of your variables or raw text and into the stream (like `std::cout` or `ostringstream`).\
+*Example:* `oss << "Error: " << errorCode;` (Data moves from the text and the variable into `oss`).
