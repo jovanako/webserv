@@ -31,3 +31,39 @@ Think of a network request like a physical package:
 - **The Payload (Body):** Is the actual contents of the box. This is the image file, the submitted login credentials, or the HTML document being transferred.
 
 In the context of your HTTP server project, the payload is the request or response "body". For example, if a user uploads a file to your server, the raw binary data of that file is the payload, which your `HttpRequest` stores in its `_body` vector. If that payload exeeds the allowed size limits, your server rejects it with a 413 "Payload Too Large" error.
+
+# Percent-Encoding
+
+Percent-Encoding strictly represents exactly one 8-bit byte of data. Because of how hexadecimal math works, it takes exactly two hexadecimal digits to represent a full byte.
+
+- **1 Hex Digit = 4 bits** (can hold values 0-15)
+- **2 Hex Digits = 8 bits = 1 full byte** (can hold values 0-255)
+
+If the standard allowed only one digit (like `%2`), it would only provide half a byte, making it impossible to know which of the 256 possible ASCII characters it was meant to represent. If it allowed three digits (like `%20A`), it would overflow the size of a standard character byte.
+
+According to the official URI specification (RFC 3986), the format must always be exactly `%` followed by two valid hex digits. For example, a space is always `%20` (hex 20, decimal 32). If a client sends `%2`, it is incomplete. If a client sends `%20A`, the server interprets the `%20` as a space, and the `A` is just treated as the next normal letter in the URL.
+
+# iss >> std::hex >> value
+
+```
+for (size_t i = 0; i < input.length(); ++i) {
+	if (input[i] == '%') {
+		std::string hexStr = input.substr(i + 1, 2);
+
+		int value;
+		std::stringstream iss(hexStr);
+		iss >> std::hex >> value;
+		
+		decoded += static_cast<char>(value);
+		i += 2;
+	}
+	...
+
+}
+```
+
+- `iss >> std::hex >> value;`\
+This is where the actual conversion happens. The `std::hex` part is a stream manipulator that instructs the stream to interpret the incoming characters as base-16 (hexadecimal) rather than standard base-10 (decimal) numbers. It reads the string `"20"`, calculates its hexadecimal value (which is 32 in decimal), and stores `32` into the `value` integer.
+
+- `decoded += static_cast<char>(value);`\
+Finally, the integer `32` is converted into a standard character. In the ASCII table, 32 corresponds to the space character (`' '`). The `static_cast<char>` ensures the compiler safely narrows the 4-byte integer into a 1-byte character without warnings. The space is then appended to the final `decoded` string.

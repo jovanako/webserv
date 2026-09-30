@@ -141,14 +141,14 @@ void HttpRequest::setUri(const std::string& uri) {
 		_queryString = "";
 	}
 	*/
-	_uri = uri;
+	_uri = uri; // use the code above instead of this line
 }
 
 void HttpRequest::setVersion(const std::string& version) {
 	if (version == "HTTP/1.0" || version == "HTTP/1.1") {
 		_version = version;
 	} else {
-		_errorCode = 501; // 501 Not Implemented
+		_errorCode = 505; // 505 HTTP version not supported
 		_parseState = PARSE_ERROR;
 	}
 }
