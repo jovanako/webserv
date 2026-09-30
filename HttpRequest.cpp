@@ -15,7 +15,7 @@ HttpRequest& HttpRequest::operator=(const HttpRequest& other){
 		_parseState = other._parseState;
 		_method = other._method;
 		_uri = other._uri;
-		// _queryString = other._queryString;
+		_queryString = other._queryString;
 		_version = other._version;
 		_headers = other._headers;
 		_body = other._body;
@@ -39,13 +39,14 @@ void HttpRequest::setErrorCode(int code) {
 
 void HttpRequest::setMethod(const std::string& method) {
 	// check for invalid characters (a method token should only contain uppercase letters)
-    // for (size_t i = 0; i < method.length(); ++i) {
-    //     if (method[i] < 'A' || method[i] > 'Z') {
-    //         _errorCode = 400; // 400 Bad Request
-    //         _parseState = PARSE_ERROR;
-    //         return;
-    //     }
-    // }
+    // maybe see all methods and check for random words
+	for (size_t i = 0; i < method.length(); ++i) {
+        if (method[i] < 'A' || method[i] > 'Z') {
+            _errorCode = 400; // 400 Bad Request
+            _parseState = PARSE_ERROR;
+            return;
+        }
+    }
 
 	// check for supported methods
 	if (method == "GET" || method == "POST" || method == "DELETE") {
@@ -56,8 +57,6 @@ void HttpRequest::setMethod(const std::string& method) {
 	}
 }
 
-
-/*
 static std::string decodePercentEncoding(const std::string& input) {
 	std::string decoded;
 
@@ -77,7 +76,7 @@ static std::string decodePercentEncoding(const std::string& input) {
 	}
 	return decoded;
 }
-*/
+
 
 
 void HttpRequest::setUri(const std::string& uri) {
@@ -126,7 +125,6 @@ void HttpRequest::setUri(const std::string& uri) {
 		}
 	}
 	// split the validated URI into Path and Query String, then decode
-	/*
 	size_t queryPos = uri.find('?');
 	if (queryPos != std::string::npos) {
 		std::string rawUri = uri.substr(0, queryPos);
@@ -140,8 +138,6 @@ void HttpRequest::setUri(const std::string& uri) {
 		_uri = decodePercentEncoding(uri);
 		_queryString = "";
 	}
-	*/
-	_uri = uri; // use the code above instead of this line
 }
 
 void HttpRequest::setVersion(const std::string& version) {
@@ -205,7 +201,7 @@ static bool isValidHeaderKey(const std::string& key) {
 		return false;
 
 	// Characters explicitly forbidden in an HTTP header field-name token
-	const std::string invalidChars = " \t\r\n:()<>@,;:\\\"/[]?={}"; // TO FIX
+	const std::string invalidChars = "()<>@,;:\\\"/[]?={}";
 	
 	for (size_t i = 0; i < key.length(); ++i) {
 		unsigned char c = static_cast<unsigned char>(key[i]);
@@ -278,13 +274,7 @@ static bool isValidDomain(const std::string& host) {
             return false;
 
         // All characters in label must be alphanumeric or hyphen
-        for (size_t i = 0; i < label.length(); ++i) {
-            char c = label[i];
-            if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-')
-                return false;
-        }
 
-		/*
 		bool hasAlpha = false;
 		for (size_t i = 0; i < label.length(); ++i) {
             char c = label[i];
@@ -297,7 +287,7 @@ static bool isValidDomain(const std::string& host) {
         // If this is the last label (the TLD), it must contain at least one letter
         if (end == host.length() && !hasAlpha)
             return false;
-		*/
+
         start = end + 1;
     }
 

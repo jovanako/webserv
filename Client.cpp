@@ -246,10 +246,15 @@ void Client::handleProcessing() {
 
 	const std::pair<int, std::string> redirect = matchedLocation->getRedirect();
 	if (redirect.first != 0 && redirect.second != "") {
-		_response.setStatusCode(redirect.first); // check if it starts with 3?
-		_response.setHeader("Location", redirect.second);
-		finalizeResponse();
-		return;
+		if (redirect.first >= 300 && redirect.first < 400) {
+			_response.setStatusCode(redirect.first); // check if it starts with 3?
+			_response.setHeader("Location", redirect.second);
+			finalizeResponse();
+			return;
+		} else {
+			buildErrorResponse(500);
+			return;
+		}
 	}
 
 	const std::map<std::string, std::string> cgiHandlers = matchedLocation->getCgiHandlers();
