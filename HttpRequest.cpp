@@ -205,7 +205,7 @@ static bool isValidHeaderKey(const std::string& key) {
 		return false;
 
 	// Characters explicitly forbidden in an HTTP header field-name token
-	const std::string invalidChars = " \t\r\n:()<>@,;:\\\"/[]?={}";
+	const std::string invalidChars = " \t\r\n:()<>@,;:\\\"/[]?={}"; // TO FIX
 	
 	for (size_t i = 0; i < key.length(); ++i) {
 		unsigned char c = static_cast<unsigned char>(key[i]);
@@ -227,7 +227,7 @@ static bool isValidIpv4(const std::string& host) {
 
 	std::istringstream ss(host);
     std::string segment;
-    int count = 0;
+    int count = 0; // counts how many segments have been found
 
     while (std::getline(ss, segment, '.')) {
         if (segment.empty() || segment.length() > 3)
@@ -238,10 +238,10 @@ static bool isValidIpv4(const std::string& host) {
                 return false;
         }
 
-        // Convert and check range [0, 255]
         std::istringstream numStream(segment);
         int val;
         numStream >> val;
+        // Check range [0, 255] - the valid bounds of an IPv4 octet
         if (val < 0 || val > 255)
             return false;
 
@@ -284,6 +284,20 @@ static bool isValidDomain(const std::string& host) {
                 return false;
         }
 
+		/*
+		bool hasAlpha = false;
+		for (size_t i = 0; i < label.length(); ++i) {
+            char c = label[i];
+            if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-')
+                return false;
+            if (std::isalpha(static_cast<unsigned char>(c)))
+                hasAlpha = true;
+        }
+
+        // If this is the last label (the TLD), it must contain at least one letter
+        if (end == host.length() && !hasAlpha)
+            return false;
+		*/
         start = end + 1;
     }
 

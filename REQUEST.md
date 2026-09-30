@@ -67,3 +67,54 @@ This is where the actual conversion happens. The `std::hex` part is a stream man
 
 - `decoded += static_cast<char>(value);`\
 Finally, the integer `32` is converted into a standard character. In the ASCII table, 32 corresponds to the space character (`' '`). The `static_cast<char>` ensures the compiler safely narrows the 4-byte integer into a 1-byte character without warnings. The space is then appended to the final `decoded` string.
+
+# `static_cast<unsigned char>`
+
+The cast to `unsigned char` in `isValidHeaderKey()` guarantees that the byte is evaluated as a positive integer (from 0 to 255) to ensure predictable and safe mathematical comparisons.
+
+In C++, the standard `char` type can be either signed or unsigned depending on the compiler and underlying system architecture. If a compiler defaults to a signed `char`, it can only safely represent values from -128 to 127.
+
+If a client sends an extended ASCII character or raw binary byte with a value of 128 or higher, a signed `char` will overflow and interpret that byte as a negative number (for example, reading it as `-106` instead of `150`).
+
+The immediate next line in the code evaluates the bounds: `if (c <= 32 || c >= 127)`. By explicitly casting the character to an `unsigned char` first, you prevent any negative number wrap-around. A byte with a value of 150 will strictly be evaluated as the positive integer 150, which cleanly and safely triggers the `c >= 127` rejection condition.
+
+# `isValidIpv4()`
+
+- `std::istringstream ss(host);`\
+Creates a string stream from the `host` string, allowing the code to easily parse it like an input stream.
+
+- `std::string segment;`\
+Declares a temporary string to hold each individual section (octet) of the IP address between the dots.
+
+- `while (std::getline(ss, segment, '.')) {`\
+Starts a loop that reads from the string stream up to the next `.` character, storing that chunk in `segment`.
+
+- `if (segment.empty() || segment.length() > 3)`\
+Checks if the chunk is missing (which happens if there are consecutive dots like `192..168`) or if it is longer than 3 characters (since the max value `255` is only 3 digits).
+
+- `std::istringstream numStream(segment);`\
+Creates a new string stream specifically for the single segment (e.g.`"192"`) to convert it into an integer.
+
+- `numStream >> val`\
+Extracts the numerical value from the string stream into `val`.
+
+- `if (segment.length() > 1 && segment[0] == '0')`\
+Rejects leading zeroes because they can be dangerously misinterpreted by some systems as octal (base-8) numbers rather than decimal.
+
+# Domain
+
+### Examples ov Valid Domains
+
+- `localhost` (single label, common for local testing)
+- `webserv.com` (standard domain)
+- `my-custom-site.org` (hyphens are allowed in the middle of a label)
+- `api.v1.backend.net` (multiple subdomains)
+- `42network.org` (numbers are allowed)
+
+### Examples of Invalid Domains
+
+- `-webserv.com` (labels cannot start with a hyphen)
+- `webserv.com-` (labels cannot end with a hyphen)
+- `my web.com` (spaces are forbidden)
+- `webserv_site.com` (underscores are forbidden in standard hostnames)
+- `999.1.2.3` (all-numeric final label, which makes it an invalid IP rather than a valid domain)
