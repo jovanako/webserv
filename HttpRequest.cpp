@@ -37,6 +37,16 @@ void HttpRequest::setErrorCode(int code) {
 }
 
 void HttpRequest::setMethod(const std::string& method) {
+	// check for invalid characters (a method token should only contain uppercase letters)
+    // for (size_t i = 0; i < method.length(); ++i) {
+    //     if (method[i] < 'A' || method[i] > 'Z') {
+    //         _errorCode = 400; // 400 Bad Request
+    //         _parseState = PARSE_ERROR;
+    //         return;
+    //     }
+    // }
+
+	// check for supported methods
 	if (method == "GET" || method == "POST" || method == "DELETE") {
 		_method = method;
 	} else {
