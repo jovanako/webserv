@@ -174,6 +174,11 @@ const std::string& HttpRequest::getUri() const {
 	return _uri;
 }
 
+const std::string& HttpRequest::getQueryString() const {
+	return _queryString;
+}
+
+
 const std::string& HttpRequest::getVersion() const {
 	return _version;
 }

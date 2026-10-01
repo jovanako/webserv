@@ -38,8 +38,12 @@ void ServerManager::acceptClient(int listenFd, std::vector<struct pollfd>& pendi
 	Client client(clientFd);
 
 	std::map<int, ServerConfig*>::iterator it = _listenSockets.find(listenFd);
-	if (it != _listenSockets.end() && it->second != NULL)
+	if (it != _listenSockets.end() && it->second != NULL) {
 		client.setServer(*(it->second));
+	}
+
+	client.setVirtualHosts(_servers);
+	
 	_clients[clientFd] = client;
 }
 

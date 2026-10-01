@@ -26,6 +26,7 @@ Client& Client::operator=(const Client& other) {
 		_readBuffer = other._readBuffer;
 		_writeBuffer = other._writeBuffer;
 		_bytesSent = other._bytesSent;
+		_virtualHosts = other._virtualHosts;
 	}
 	return *this;
 }
@@ -43,6 +44,11 @@ void Client::setClientState(ConnectionState state) {
 void Client::setServer(const ServerConfig& server) {
 	_server = server;
 }
+
+void Client::setVirtualHosts(const std::vector<ServerConfig>& hosts) {
+	_virtualHosts = hosts;
+}
+
 
 // check if we put in header
 static bool isHostHeader(std::string key) {
@@ -81,20 +87,51 @@ void Client::handleReadHeader() {
 		}
 
 		bool hasHost = false;
+		std::string hostValue = "";
+
 		if (_request.getVersion() == "HTTP/1.1") {
 			std::map<std::string, std::string> headers = _request.getHeaders();
-			for (std::map<std::string, std::string>::const_iterator it = headers.begin(); it != headers.end(); ++it) {
-				if (isHostHeader(it->first)) {
-					hasHost = true;
-					break; 
-				}
+			std::map<std::string, std::string>::const_iterator it = headers.find("host");
+
+			if (it != headers.end()) {
+				hasHost = true;
+				hostValue = it->second;
 			}
+
 			if (!hasHost) {
 				_response.setStatusCode(400); // 400 Bad Request strictly required for HTTP/1.1
 				finalizeResponse();
 				return;
 			}
 		}
+
+		// checking if we got the right server block (in case we are listening on the same port more than once)
+		size_t colonPos = hostValue.find(':');
+		std::string hostName;
+		if (colonPos != std::string::npos) {
+			hostName = hostValue.substr(0, colonPos);
+		} else {
+			hostName = hostValue;
+		}
+
+		for (size_t i = 0; i < _virtualHosts.size(); ++i) {
+			if (_virtualHosts[i].getPort() == _server.getPort()) {
+				const std::vector<std::string>& serverNames = _virtualHosts[i].getServerNames();
+				bool matchFound = false;
+
+				for (size_t j = 0; j < serverNames.size(); ++j) {
+					if (serverNames[j] == hostName) {
+						_server = _virtualHosts[i];
+						matchFound = true;
+						break;
+					}
+				}
+				if (matchFound) {
+					break;
+				}
+			}
+		}
+
 		// Only keep leftover bytes that belong to the body by deleting the header
 		_readBuffer.erase(0, headerEnd + 4);
 
@@ -214,8 +251,11 @@ std::string generateAutoindex(const std::string& fullPath, const std::string& re
 	//skeleton of HTML
 	std::ostringstream html;
 	html << "<!DOCTYPE html>\n"
-         << "<html>\n<head>\n<title>Index of " << requestUri << "</title>\n</head>\n<body>\n"
-         << "<h1>Index of " << requestUri << "</h1>\n<hr>\n<pre>\n";
+         << "<html>\n<head>\n"
+		 << "<title>Index of " << requestUri << "</title>\n"
+		 << "</head>\n<body>\n"
+         << "<h1>Index of " << requestUri << "</h1>\n"
+		 << "<hr>\n<pre>\n";
 		 
 	//might change baseUri soo cant use requestURI - Ensuring trailing slash 
 	std::string baseUri = requestUri;
@@ -273,6 +313,171 @@ static std::string getMimeType(const std::string& path) {
 	// fallback for anything else
 	return "application/octet-stream";
 
+}
+
+std::string Client::makeFullPath(const LocationConfig& matchedLocation, const std::string uri) {
+	std::string path = matchedLocation.getPath();
+	std::string strippedUri = uri.substr(path.length());
+
+	std::string fullPath = matchedLocation.getRoot();
+
+	if (!fullPath.empty() && fullPath[fullPath.length() - 1] == '/') {
+		fullPath.erase(fullPath.length() - 1);
+	}
+	if (strippedUri.empty() || strippedUri[0] != '/') {
+		fullPath += "/";
+	}
+	fullPath += strippedUri;
+
+	return fullPath;
+}
+
+int Client::handleGet(const LocationConfig& matchedLocation, std::string fullPath, const std::string uri) {
+	struct stat pathStat;
+	// check if file exists
+	if (stat(fullPath.c_str(), &pathStat) == 0) {
+		bool isFileToServe = false;
+		// check if it's a directory
+		if (S_ISDIR(pathStat.st_mode)) {
+			// enforce trailing slash on the URI
+			if (!uri.empty() && uri[uri.length() - 1] != '/') {
+				_response.setHeader("Location", uri + "/");
+				buildErrorResponse(301); // moved permanently
+				return 0;
+			}
+			// search for an index file
+			bool indexFound = false;
+			const std::vector<std::string>& indices = matchedLocation.getIndex();
+			for (size_t i = 0; i < indices.size(); ++i) {
+				std::string indexPath = fullPath + indices[i];
+				struct stat indexStat;
+
+				if (stat(indexPath.c_str(), &indexStat) == 0 && S_ISREG(indexStat.st_mode)) {
+					fullPath = indexPath;
+					pathStat = indexStat;
+					indexFound = true;
+					break;
+				}
+			}
+			if (!indexFound) {
+				if (!(matchedLocation.getAutoindex())) {
+					buildErrorResponse(403);
+					return 0;
+				} else {
+					std::string htmlBody = generateAutoindex(fullPath, uri);
+
+					// opendir failed (likely due to permissions)
+					if (htmlBody.empty()) {
+						buildErrorResponse(403);
+						return 0;
+					}
+					// successfully generated the listing; set the response data
+					_response.setStatusCode(200);
+					_response.setBody(htmlBody);
+
+					std::ostringstream lengthStream;
+					lengthStream << htmlBody.length();
+
+					_response.setHeader("Content-Type", "text/html");
+					_response.setHeader("Content-Length", lengthStream.str());
+					return 1;
+					//ToDo build and sebd response
+				}
+			} else {
+				isFileToServe = true;
+			}
+		} else if (S_ISREG(pathStat.st_mode)) {
+			isFileToServe = true;
+		}
+		if (isFileToServe) {
+			
+			// std::ios::in mode flag telling the stream to open file for reading (input)
+			// std::ios::binary mode flag that forces C++ to read the file byte-by-byte (not in text mode)
+			std::ifstream file(fullPath.c_str(), std::ios::in | std::ios::binary);
+
+			if (!file.is_open()) {
+				buildErrorResponse(403);
+				return 0;
+			}
+
+			std::ostringstream ss;
+			ss << file.rdbuf();
+			std::string fileContent = ss.str();
+			file.close();
+
+			_response.setStatusCode(200);
+			_response.setBody(fileContent);
+
+			std::ostringstream lengthStream;
+			lengthStream << fileContent.length();
+			_response.setHeader("Content-Length", lengthStream.str());
+			// mime-type logic
+			std::string mimeType = getMimeType(fullPath);
+			_response.setHeader("Content-Type", mimeType);
+
+		} else {
+			buildErrorResponse(403);
+			return 0;
+		}
+	} else {
+		//the path does not exist on disc
+		buildErrorResponse(404);
+		return 0;
+	}
+	return 1;
+}
+
+
+int Client::handlePost(const LocationConfig& matchedLocation, const std::string uri) {
+	size_t lastSlash = uri.find_last_of('/');
+	std::string filename;
+	if (lastSlash != std::string::npos) {
+		filename = uri.substr(lastSlash);
+	} else {
+		filename = "/" + uri;
+	}
+
+	// create absolute path to save the file
+	std::string savePath = matchedLocation.getUploadStore() + filename;
+
+	// open an output file tream in binary mode to prevent corruption
+	std::ofstream outFile(savePath.c_str(), std::ios::out | std::ios::binary);
+
+	if (!outFile.is_open()) {
+		buildErrorResponse(403); // forbidden
+		return 0;
+	}
+
+	// use write() so that it writes binary data correctly
+	const std::vector<char>& body = _request.getBody();
+	if (!body.empty()) {
+		outFile.write(&body[0], body.size());
+
+		if (outFile.fail()) {
+			outFile.close();
+			std::remove(savePath.c_str());
+			buildErrorResponse(500); // internal server error
+			return 0;
+		}
+	}
+	outFile.close();
+
+	_response.setStatusCode(201);
+	_response.setHeader("Content-Length", "0");
+	_response.setHeader("Location", uri);
+	return 1;
+}
+
+int Client::handleDelete(const std::string& fullPath) {
+	// std::remove returns 0 on success, and non-zero on failure
+	if (std::remove(fullPath.c_str()) == 0) {
+		_response.setStatusCode(204); // 204 no content
+		_response.setHeader("Content-Length", "0");
+	} else {
+		buildErrorResponse(403); // deletion failed (file doesn't exist or no permission)
+		return 0;
+	}
+	return 1;
 }
 
 void Client::handleProcessing() {
@@ -339,118 +544,29 @@ void Client::handleProcessing() {
 		}
 	}
 
-	if (method == "POST" && matchedLocation->getUploadStore() != "") {
-		// save the body payload to the designated directory
-	}
+	std::string fullPath = makeFullPath(*matchedLocation, uri);
 
-	if (method == "GET") {
-		std::string path = matchedLocation->getPath();
-		std::string strippedUri = uri.substr(path.length());
-
-		std::string fullPath = matchedLocation->getRoot();
-
-		if (!fullPath.empty() && fullPath[fullPath.length() - 1] == '/') {
-			fullPath.erase(fullPath.length() - 1);
-		}
-		if (strippedUri.empty() || strippedUri[0] != '/') {
-			fullPath += "/";
-		}
-		fullPath += strippedUri;
-
-		struct stat pathStat;
-		// check if file exists
-		if (stat(fullPath.c_str(), &pathStat) == 0) {
-			bool isFileToServe = false;
-			// check if it's a directory
-			if (S_ISDIR(pathStat.st_mode)) {
-				// enforce trailing slash on the URI
-				if (!uri.empty() && uri[uri.length() - 1] != '/') {
-					_response.setHeader("Location", uri + "/");
-					buildErrorResponse(301); // moved permanently
-					return;
-				}
-				// search for an index file
-				bool indexFound = false;
-				const std::vector<std::string>& indices = matchedLocation->getIndex();
-				for (size_t i = 0; i < indices.size(); ++i) {
-					std::string indexPath = fullPath + indices[i];
-					struct stat indexStat;
-
-					if (stat(indexPath.c_str(), &indexStat) == 0 && S_ISREG(indexStat.st_mode)) {
-						fullPath = indexPath;
-						pathStat = indexStat;
-						indexFound = true;
-						break;
-					}
-				}
-				if (!indexFound) {
-					if (!(matchedLocation->getAutoindex())) {
-						buildErrorResponse(403);
-						return;
-					} else {
-						std::string htmlBody = generateAutoindex(fullPath, uri);
-
-						// opendir failed (likely due to permissions)
-						if (htmlBody.empty()) {
-							buildErrorResponse(403);
-							return;
-						}
-						// successfully generated the listing; set the response data
-						_response.setStatusCode(200);
-						_response.setBody(htmlBody);
-
-						std::ostringstream lengthStream;
-						lengthStream << htmlBody.length();
-
-						_response.setHeader("Content-Type", "text/html");
-						_response.setHeader("Content-Length", lengthStream.str());
-						return;
-						//ToDo build and sebd response
-					}
-				} else {
-					isFileToServe = true;
-				}
-			}
-			else if (S_ISREG(pathStat.st_mode)) {
-				isFileToServe = true;
-			}
-			if (isFileToServe) {
-				
-				// std::ios::in mode flag telling the stream to open file for reading (input)
-				// std::ios::binary mode flag that forces C++ to read the file byte-by-byte (not in text mode)
-				std::ifstream file(fullPath.c_str(), std::ios::in | std::ios::binary);
-
-				if (!file.is_open()) {
-					buildErrorResponse(403);
-					return;
-				}
-
-				std::ostringstream ss;
-				ss << file.rdbuf();
-				std::string fileContent = ss.str();
-				file.close();
-
-				_response.setStatusCode(200);
-				_response.setBody(fileContent);
-
-				std::ostringstream lengthStream;
-				lengthStream << fileContent.length();
-				_response.setHeader("Content-Length", lengthStream.str());
-				// mime-type logic
-				std::string mimeType = getMimeType(fullPath);
-				_response.setHeader("Content-Type", mimeType);
-
-			}
-		}
-		else {
-			//the path does not exist on disc
-			buildErrorResponse(404);
-			return;
-		}
-	}
-
-	// construct responsehandleWriteResponse
+	
+	
 	if (!cgiFlag) {
+		if (method == "GET") {
+			if (!handleGet(*matchedLocation, fullPath, uri)) {
+				return;
+			}
+		} else if (method == "POST") {
+			if (matchedLocation->getUploadStore() != ""){
+				if (!handlePost(*matchedLocation, uri)) {
+					return;
+				}
+			} else {
+				buildErrorResponse(403); // forbidden
+				return;
+			}
+		} else if (method == "DELETE") {
+			if (!handleDelete(fullPath)) {
+				return;
+			}
+		}
 		finalizeResponse();
 	}
 }

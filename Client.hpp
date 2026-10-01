@@ -6,6 +6,7 @@
 #include "ServerConfig.hpp"
 #include <sys/socket.h>
 #include <unistd.h>
+#include <cstdio>
 #include <sys/stat.h>
 #include <fstream>
 #include <dirent.h>
@@ -31,6 +32,7 @@ private:
 	std::string			_readBuffer;
 	std::vector<char>	_writeBuffer;
 	size_t				_bytesSent;
+	std::vector<ServerConfig> _virtualHosts;
     // ... buffers, timers, etc.
 
 	void handleReadHeader();
@@ -40,6 +42,10 @@ private:
 	bool shouldKeepAlive() const;
 	void finalizeResponse();
 	void resetForNextRequest();
+	std::string makeFullPath(const LocationConfig& matchedLocation, const std::string uri);
+	int handleGet(const LocationConfig& matchedLocation, std::string fullPath, const std::string uri);
+	int handlePost(const LocationConfig& matchedLocation, const std::string uri);
+	int handleDelete(const std::string& fullPath);
 	
 	public:
 	Client();
@@ -51,6 +57,7 @@ private:
     ConnectionState getClientState() const;
     void setClientState(ConnectionState state);
 	void setServer(const ServerConfig& server);
+	void setVirtualHosts(const std::vector<ServerConfig>& hosts);
 	
 	void handleRead();
 	void handleWrite();
