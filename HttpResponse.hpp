@@ -19,10 +19,12 @@ class HttpResponse {
 		HttpResponse& operator=(const HttpResponse& other);
 		~HttpResponse();
 		
+		std::string			getVersion() const;
 		int					getStatusCode() const;
 		std::string			getStatusMessage(int code) const;
 		std::vector<char>	getBody() const;
 		
+		void setVersion(const std::string& version);
 		void setStatusCode(int code);
 		void setHeader(const std::string& key, const std::string& value);
 		void setBody(const std::vector<char>& body);

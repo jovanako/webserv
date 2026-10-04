@@ -392,7 +392,6 @@ static std::string getMimeType(const std::string& path) {
 
 	// fallback for anything else
 	return "application/octet-stream";
-
 }
 
 int Client::handleGet(const LocationConfig& matchedLocation, std::string fullPath, const std::string uri) {
@@ -684,6 +683,7 @@ void Client::parseHeaders() {
 
 	if (version == "HTTP/1.0" || version == "HTTP/1.1") {
 		_request.setVersion(version);
+		_response.setVersion(version);
 	}
 	else {
 		_response.setStatusCode(505); // HTTP version not supported

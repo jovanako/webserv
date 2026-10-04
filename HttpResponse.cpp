@@ -22,6 +22,10 @@ HttpResponse &HttpResponse::operator=(const HttpResponse& other) {
 
 HttpResponse::~HttpResponse() {}
 
+std::string HttpResponse::getVersion() const {
+	return _version;
+}
+
 int HttpResponse::getStatusCode() const {
 	return _statusCode;
 }
@@ -67,7 +71,10 @@ std::vector<char> HttpResponse::getBody() const {
 	return _body;
 }
 
-// Setters for generating the response
+void HttpResponse::setVersion(const std::string& version) {
+	_version = version;
+}
+
 void HttpResponse::setStatusCode(int code) {
     _statusCode = code;
 	_statusMessage = getStatusMessage(code);
