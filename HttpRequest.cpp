@@ -77,8 +77,6 @@ static std::string decodePercentEncoding(const std::string& input) {
 	return decoded;
 }
 
-
-
 void HttpRequest::setUri(const std::string& uri) {
 	// absolute path requirement
 	if (uri.empty() || uri[0] != '/') {

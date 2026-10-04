@@ -42,32 +42,12 @@ int Client::getSocketFd() const {
 	return _socketFd;
 }
 
-const HttpRequest& Client::getRequest() const {
-	return _request;
-}
-
-const HttpResponse& Client::getResponse() const {
-	return _response;
-}
-
 const ServerConfig& Client::getServer() const {
 	return _server;
 }
 
 const std::vector<ServerConfig>& Client::getVirtualHosts() const {
 	return _virtualHosts;
-}
-
-const std::string& Client::getReadBuffer() const {
-	return _readBuffer;
-}
-
-const std::vector<char>& Client::getWriteBuffer() const {
-	return _writeBuffer;
-}
-
-size_t Client::getBytesSent() const {
-	return _bytesSent;
 }
 
 void Client::setClientState(ConnectionState state) {
@@ -82,36 +62,25 @@ void Client::setVirtualHosts(const std::vector<ServerConfig>& hosts) {
 	_virtualHosts = hosts;
 }
 
-void Client::setReadBuffer(const std::string& buffer) {
-	_readBuffer = buffer;
-}
-
-void Client::setWriteBuffer(const std::vector<char>& buffer) {
-	_writeBuffer = buffer;
-}
-
-// check if we put in header
-static bool isHostHeader(std::string key) {
-	for (size_t i = 0; i < key.length(); ++i) {
-		key[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(key[i])));
-	}
-	return key == "host";
-}
+static std::string getMimeType(const std::string& path);
 
 void Client::handleReadHeader() {
-	char buf[BUFFER_SIZE];
-	ssize_t bytesRead = recv(_socketFd, buf, sizeof(buf), 0);
+	size_t headerEnd = _readBuffer.find("\r\n\r\n");
+	if (headerEnd == std::string::npos) {
+		char buf[BUFFER_SIZE];
+		ssize_t bytesRead = recv(_socketFd, buf, sizeof(buf), 0);
 
-	if (bytesRead <= 0) {
-		// 0 means client closed connection; < 0 means read error
-		// handle error
-		_clientState = DONE;
-		return;
+		if (bytesRead <= 0) {
+			// 0 means client closed connection; < 0 means read error
+			// handle error
+			_clientState = DONE;
+			return;
+		}
+
+		_readBuffer.append(buf, bytesRead);
+		headerEnd = _readBuffer.find("\r\n\r\n");
 	}
 
-	_readBuffer.append(buf, bytesRead);
-
-	size_t headerEnd = _readBuffer.find("\r\n\r\n");
 	if (headerEnd != std::string::npos) {
 		// change state?
 		parseHeaders();
@@ -723,6 +692,7 @@ void Client::parseHeaders() {
 	else {
 		_response.setStatusCode(505); // HTTP version not supported
 		_request.setRequestState(HttpRequest::PARSE_ERROR);
+		finalizeResponse();
 		return;
 	}
 

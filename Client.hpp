@@ -65,19 +65,12 @@ class Client {
 		
 		ConnectionState						getClientState() const;
 		int									getSocketFd() const;
-		const HttpRequest&					getRequest() const;
-		const HttpResponse&					getResponse() const;
 		const ServerConfig&					getServer() const;
 		const std::vector<ServerConfig>&	getVirtualHosts() const;
-		const std::string&					getReadBuffer() const;
-		const std::vector<char>&			getWriteBuffer() const;
-		size_t								getBytesSent() const;
 
 		void setClientState(ConnectionState state);
 		void setServer(const ServerConfig& server);
 		void setVirtualHosts(const std::vector<ServerConfig>& hosts);
-		void setReadBuffer(const std::string& buffer);
-		void setWriteBuffer(const std::vector<char>& buffer);
 };
 
 #endif
