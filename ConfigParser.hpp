@@ -14,12 +14,13 @@ class ConfigParser {
     	size_t                      _currentTokenIndex;
     	std::vector<ServerConfig>   _servers;
 
-		void	tokenize();
-		void	parseServerBlock();
-		void	parseErrorPage(ServerConfig& server);
-		void	parseLocationBlock(ServerConfig& server);
-		void	verifyToken(const std::string& expected);
-		size_t	parseSize(const std::string& sizeStr);
+		void		tokenize();
+		std::string	getNextToken();
+		void		parseServerBlock();
+		void		parseErrorPage(ServerConfig& server);
+		void		parseLocationBlock(ServerConfig& server);
+		void		verifyToken(const std::string& expected);
+		size_t		parseSize(const std::string& sizeStr);
 		
 	public:
 		ConfigParser();
@@ -28,7 +29,7 @@ class ConfigParser {
 		ConfigParser& operator=(const ConfigParser& other);
 		~ConfigParser();
 
-		std::vector<ServerConfig> parse();
+		std::vector<ServerConfig>	parse();
 };
 
 #endif

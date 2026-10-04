@@ -28,6 +28,7 @@ void ConfigParser::tokenize() {
 
 	std::string line;
 	while (std::getline(configFile, line)) {
+
 		// get rid of comments
 		size_t commentPos = line.find('#');
 		if (commentPos != std::string::npos) {
@@ -52,25 +53,42 @@ void ConfigParser::tokenize() {
 	}
 }
 
+std::string ConfigParser::getNextToken() {
+	if (_currentTokenIndex >= _tokens.size()) {
+		throw std::runtime_error("Config Error: Unexpected end of file.");
+	}
+	return _tokens[_currentTokenIndex++];
+}
+
 void ConfigParser::parseServerBlock() {
 	ServerConfig server;
 	verifyToken("{");
 
 	while (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] != "}") {
-		std::string directive = _tokens[_currentTokenIndex++];
+		std::string directive = getNextToken();
 
 		if (directive == "listen") {
-			server.setPort(std::atoi(_tokens[_currentTokenIndex++].c_str()));
+			std::string port = getNextToken();
+
+			for (size_t i = 0; i < port.length(); ++i) {
+				if (!std::isdigit(static_cast<unsigned char>(port[i]))) {
+					throw std::runtime_error("Config Error: Invalid port '" + port + "'");
+				}
+			}
+			server.setPort(std::atoi(port.c_str()));
 			verifyToken(";");
 		}
 		else if (directive == "server_name") {
+			if (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] == ";") {
+				throw std::runtime_error("Config Error: 'server_name' directive requires at least one name argument");
+			}
 			while (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] != ";") {
-				server.addServerName(_tokens[_currentTokenIndex++]);
+				server.addServerName(getNextToken());
 			}
 			verifyToken(";");
 		}
 		else if (directive == "client_max_body_size") {
-			server.setClientMaxBodySize(parseSize(_tokens[_currentTokenIndex++]));
+			server.setClientMaxBodySize(parseSize(getNextToken()));
 			verifyToken(";");
 		}
 		else if (directive == "error_page") {
@@ -88,29 +106,34 @@ void ConfigParser::parseServerBlock() {
 }
 
 void ConfigParser::parseErrorPage(ServerConfig& server) {
-	std::string errorPath;
-	size_t i = _currentTokenIndex;
+	std::vector<std::string> args;
+	std::string token = getNextToken();
 
-	while (i < _tokens.size()) {
-		if (i + 1 < _tokens.size() && _tokens[i + 1] == ";") {
-			errorPath = _tokens[i];
-			break;
+	// sequentially gather all arguments until we hit the semicolon
+	while (token != ";") {
+		args.push_back(token);
+		token = getNextToken();
+	}
+
+	// an error_page directive needs at least one code and one path (min 2 args)
+	if (args.size() < 2) {
+		throw std::runtime_error("Config Error: error_page requires at least one status code and a file path");
+	}
+
+	// the last argument immediately before the semicolon is always the path
+	std::string errorPath = args[args.size() - 1];
+
+	// all preceding arguments are the status codes
+	for (size_t i = 0; i < args.size() - 1; ++i) {
+
+		//ensure the status code contains only digits
+		for (size_t j = 0; j < args[i].length(); ++j) {
+			if (!std::isdigit(static_cast<unsigned char>(args[i][j]))) {
+				throw std::runtime_error("Config Error: Invalid error_page status code '" + args[i] + "'");
+			}
 		}
-		i++;
+		server.addErrorPage(std::atoi(args[i].c_str()), errorPath);
 	}
-
-	if (i >= _tokens.size()) {
-		throw std::runtime_error("Config Error: Missing ';' in error_page directive");
-	}
-
-	while (_currentTokenIndex != i) {
-		server.addErrorPage(std::atoi(_tokens[_currentTokenIndex].c_str()), errorPath);
-		_currentTokenIndex++;
-	}
-
-	_currentTokenIndex++;
-
-	verifyToken(";");
 }
 
 void ConfigParser::parseLocationBlock(ServerConfig &server) {
@@ -120,68 +143,85 @@ void ConfigParser::parseLocationBlock(ServerConfig &server) {
 	std::vector<std::string> cgiExts;
 	std::vector<std::string> cgiPaths;
 
-	if (_currentTokenIndex < _tokens.size()) {
-		location.setPath(_tokens[_currentTokenIndex++]);
-	} else {
-		throw std::runtime_error("Config Error: Expected path after 'location'");
-	}
+	location.setPath(getNextToken());
 
 	verifyToken("{");
 
 	while (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] != "}") {
-		std::string directive = _tokens[_currentTokenIndex++];
+		std::string directive = getNextToken();
 		
 		if (directive == "root") {
-			if(_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] != ";") {
-				location.setRoot(_tokens[_currentTokenIndex++]);
-			} else {
-				throw std::runtime_error("Config Error: Missing value for 'root'");
-			}
+			location.setRoot(getNextToken());
 			verifyToken(";");
 		}
 		else if (directive == "index") {
+			// check if the very next token is the semicolon (meaning no arguments were given)
+			if (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] == ";") {
+				throw std::runtime_error("Config Error: 'index' directive requires at least one file argument");
+			}
+
 			index_present = true;
 			while (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] != ";") {
-				location.addIndex(_tokens[_currentTokenIndex++]);
+				location.addIndex(getNextToken());
 			}
 			verifyToken(";");
 		}
 		else if (directive == "allow_methods") {
+			if (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] == ";") {
+				throw std::runtime_error("Config Error: 'allow_methods' directive requires at least one method argument");
+			}
+
 			while (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] != ";") {
-				location.addAllowedMethod(_tokens[_currentTokenIndex++]);
+				location.addAllowedMethod(getNextToken());
 			}
 			verifyToken(";");
 		}
 		else if (directive == "autoindex") {
-			if (_tokens[_currentTokenIndex] == "on") {
+			std::string autoindexVal = getNextToken();
+			if (autoindexVal == "on") {
 				location.setAutoindex(true);
-			} else if (_tokens[_currentTokenIndex] == "off") {
+			} else if (autoindexVal == "off") {
 				location.setAutoindex(false);
 			} else {
 				throw std::runtime_error("Config Error: invalid autoindex");
 			}
-			_currentTokenIndex++;
 			verifyToken(";");
 		}
 		else if (directive == "upload_store") {
-			location.setUploadStore(_tokens[_currentTokenIndex++]);
+			location.setUploadStore(getNextToken());
 			verifyToken(";");
 		}
 		else if (directive == "cgi_ext"){
+			if (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] == ";") {
+				throw std::runtime_error("Config Error: 'cgi_ext' directive requires at least one extension argument");
+			}
 			while (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] != ";") {
-				cgiExts.push_back(_tokens[_currentTokenIndex++]);
+				cgiExts.push_back(getNextToken());
 			}
 			verifyToken(";");
 		}
 		else if (directive == "cgi_path") {
+			if (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] == ";") {
+				throw std::runtime_error("Config Error: 'cgi_path' directive requires at least one path argument");
+			}
 			while (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] != ";") {
-				cgiPaths.push_back(_tokens[_currentTokenIndex++]);
+				cgiPaths.push_back(getNextToken());
 			}
 			verifyToken(";");
 		}
 		else if (directive == "return") {
-			location.setRedirect(std::atoi(_tokens[_currentTokenIndex].c_str()), _tokens[_currentTokenIndex + 1]);
-			_currentTokenIndex += 2;
+			std::string codeStr = getNextToken();
+
+			// ensure the redirect code contains only digits
+			for (size_t i = 0; i < codeStr.length(); ++i) {
+				if (!std::isdigit(static_cast<unsigned char>(codeStr[i]))) {
+					throw std::runtime_error("Config Error: Invalid return status code '" + codeStr + "'");
+				}
+			}
+
+			int code = std::atoi(codeStr.c_str());
+			std::string url = getNextToken();
+			location.setRedirect(code, url);
 			verifyToken(";");
 		}
 		else {
@@ -205,7 +245,7 @@ void ConfigParser::parseLocationBlock(ServerConfig &server) {
 
 void ConfigParser::verifyToken(const std::string& expected) {
     if (_currentTokenIndex >= _tokens.size() || _tokens[_currentTokenIndex] != expected) {
-        throw std::runtime_error("Config Error: Expected '" + expected + "' not found."); // Note: std::to_string(_currentTokenIndex)) Use a custom to_string equivalent if strictly C++98
+        throw std::runtime_error("Config Error: Expected Token '" + expected + "' not found.");
     }
     _currentTokenIndex++;
 }
@@ -217,24 +257,21 @@ size_t ConfigParser::parseSize(const std::string& sizeStr) {
 	char lastChar = sizeStr[sizeStr.length() - 1];
 	size_t multiplier = 1;
 	std::string numPart = sizeStr;
-	std::string calculatedNumPart = sizeStr.substr(0, sizeStr.length() - 1);
 
 	if (lastChar == 'K' || lastChar == 'k') {
 		multiplier = 1024;
-		numPart = calculatedNumPart;
-	}
-	else if (lastChar == 'M' || lastChar == 'm') {
+		numPart = sizeStr.substr(0, sizeStr.length() - 1);
+	} else if (lastChar == 'M' || lastChar == 'm') {
 		multiplier = 1048576;
-		numPart = calculatedNumPart;
-	}
-	else if (lastChar == 'G' || lastChar == 'g') {
+		numPart = sizeStr.substr(0, sizeStr.length() - 1);
+	} else if (lastChar == 'G' || lastChar == 'g') {
 		multiplier = 1073741824;
-		numPart = calculatedNumPart;
+		numPart = sizeStr.substr(0, sizeStr.length() - 1);
 	}
 
 	std::istringstream iss(numPart);
     size_t value;
-    if (!(iss >> value)) {
+    if (!(iss >> value) || !iss.eof()) {
         throw std::runtime_error("Config Error: Invalid client_max_body_size value '" + sizeStr + "'");
     }
 
