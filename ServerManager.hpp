@@ -23,6 +23,7 @@ class ServerManager {
 		void acceptClient(int listenFd, std::vector<struct pollfd>& pendingFds);
 		void removeClient(int clientFd);
 		void initServers();
+		
 	public:
 		ServerManager();
 		ServerManager(const std::vector<ServerConfig>& servers);
