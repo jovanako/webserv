@@ -54,7 +54,7 @@ class Client {
 		Client(const Client& other);
 		Client& operator=(const Client& other);
 		~Client();
-				
+		
 		void handleRead();
 		void handleWrite();
 		void handleProcessing();

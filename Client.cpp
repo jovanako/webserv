@@ -90,8 +90,6 @@ void Client::setWriteBuffer(const std::vector<char>& buffer) {
 	_writeBuffer = buffer;
 }
 
-static std::string getMimeType(const std::string& path);
-
 // check if we put in header
 static bool isHostHeader(std::string key) {
 	for (size_t i = 0; i < key.length(); ++i) {
@@ -101,21 +99,19 @@ static bool isHostHeader(std::string key) {
 }
 
 void Client::handleReadHeader() {
-	size_t headerEnd = _readBuffer.find("\r\n\r\n");
-	if (headerEnd == std::string::npos) {
-		char buf[BUFFER_SIZE];
-		ssize_t bytesRead = recv(_socketFd, buf, sizeof(buf), 0);
+	char buf[BUFFER_SIZE];
+	ssize_t bytesRead = recv(_socketFd, buf, sizeof(buf), 0);
 
-		if (bytesRead <= 0) {
-			// 0 means client closed connection; < 0 means read error
-			// handle error
-			_clientState = DONE;
-			return;
-		}
-
-		_readBuffer.append(buf, bytesRead);
-		headerEnd = _readBuffer.find("\r\n\r\n");
+	if (bytesRead <= 0) {
+		// 0 means client closed connection; < 0 means read error
+		// handle error
+		_clientState = DONE;
+		return;
 	}
+
+	_readBuffer.append(buf, bytesRead);
+
+	size_t headerEnd = _readBuffer.find("\r\n\r\n");
 	if (headerEnd != std::string::npos) {
 		// change state?
 		parseHeaders();
@@ -227,60 +223,41 @@ void Client::handleReadBody() {
 	}
 }
 
-void Client::handleWriteResponse() {
-	if(_bytesSent == 0 && _writeBuffer.empty()) {
-		std::vector<char> raw = _response.createResponse();
-		_writeBuffer.assign(raw.begin(), raw.end());
-	}
-	size_t remainingBytes = _writeBuffer.size() - _bytesSent;
+void Client::buildErrorResponse(int statusCode) {
+	_response.setStatusCode(statusCode);
 
-	ssize_t bytesWritten = send(_socketFd, &_writeBuffer[_bytesSent], remainingBytes, 0);
-	if(bytesWritten <= 0) {
-		setClientState(DONE); //handle error?
-		return;
-	}
+	std::string body;
+	bool loadedFromFile = false;
+	std::string mimeType = "text/html";
 
-	_bytesSent += bytesWritten;
+	const std::map<int, std::string>& errorPages = _server.getErrorPages();
+	std::map<int, std::string>::const_iterator it = errorPages.find(statusCode);
 
-	if(_bytesSent >= _writeBuffer.size()) {
-		if (shouldKeepAlive()) {
-			resetForNextRequest(); // set state back to reading header and clears request/response
-
-			if (_readBuffer.find("\r\n\r\n") != std::string::npos) {
-				handleReadHeader();
-			}
-		} else {
-			setClientState(DONE);
+	if (it != errorPages.end()) {
+		std::string filePath = it->second;
+		// prepend root or server path if needed
+		std::ifstream file(filePath.c_str(), std::ios::in | std::ios::binary);
+		if (file.is_open()) {
+			std::ostringstream ss;
+			ss << file.rdbuf();
+			body = ss.str();
+			loadedFromFile = true;
+			mimeType = getMimeType(filePath);
 		}
 	}
-}
+	if (!loadedFromFile) {
+        std::ostringstream ss;
+        ss << "<!DOCTYPE html><html><head><title>" << statusCode << " " 
+           << _response.getStatusMessage(statusCode)
+           << "</title></head><body><center><h1>" << statusCode << " " 
+           << _response.getStatusMessage(statusCode)
+           << "</h1></center><hr><center>webserv</center></body></html>";
+        body = ss.str();
+    }
 
-void Client::handleCgiPipeWait() {
-
-}
-
-bool Client::shouldKeepAlive() const {
-	if (_response.getStatusCode() >= 400 && _response.getStatusCode() != 404 && _response.getStatusCode() != 405) {
-		return false;
-	}
-
-	std::map<std::string, std::string> headers = _request.getHeaders();
-	std::map<std::string, std::string>::const_iterator it = headers.find("connection");
-	std::string connVal = "";
-	if (it != headers.end()) {
-		connVal = it->second;
-	}
-
-	for (size_t i = 0; i < connVal.length(); ++i) {
-		connVal[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(connVal[i])));
-	}
-
-	if (_request.getVersion() == "HTTP/1.1") {
-		return (connVal != "close");
-	} else if (_request.getVersion() == "HTTP/1.0") {
-		return (connVal == "keep-alive");
-	}
-	return false;
+	_response.setHeader("Content-Type", mimeType);
+	_response.setBody(body);
+	finalizeResponse();
 }
 
 void Client::finalizeResponse() {
@@ -305,24 +282,7 @@ void Client::resetForNextRequest() {
 	_clientState = READING_HEADER;
 }
 
-std::string Client::makeFullPath(const LocationConfig& matchedLocation, const std::string uri) {
-	std::string path = matchedLocation.getPath();
-	std::string strippedUri = uri.substr(path.length());
-
-	std::string fullPath = matchedLocation.getRoot();
-
-	if (!fullPath.empty() && fullPath[fullPath.length() - 1] == '/') {
-		fullPath.erase(fullPath.length() - 1);
-	}
-	if (strippedUri.empty() || strippedUri[0] != '/') {
-		fullPath += "/";
-	}
-	fullPath += strippedUri;
-
-	return fullPath;
-}
-
-static std::string generateAutoindex(const std::string& fullPath, const std::string& requestUri) {
+std::string generateAutoindex(const std::string& fullPath, const std::string& requestUri) {
 	DIR* dir = opendir(fullPath.c_str());
 	if(dir == NULL) {
 		return (""); //this will be a 403
@@ -392,6 +352,24 @@ static std::string getMimeType(const std::string& path) {
 
 	// fallback for anything else
 	return "application/octet-stream";
+
+}
+
+std::string Client::makeFullPath(const LocationConfig& matchedLocation, const std::string uri) {
+	std::string path = matchedLocation.getPath();
+	std::string strippedUri = uri.substr(path.length());
+
+	std::string fullPath = matchedLocation.getRoot();
+
+	if (!fullPath.empty() && fullPath[fullPath.length() - 1] == '/') {
+		fullPath.erase(fullPath.length() - 1);
+	}
+	if (strippedUri.empty() || strippedUri[0] != '/') {
+		fullPath += "/";
+	}
+	fullPath += strippedUri;
+
+	return fullPath;
 }
 
 int Client::handleGet(const LocationConfig& matchedLocation, std::string fullPath, const std::string uri) {
@@ -489,6 +467,7 @@ int Client::handleGet(const LocationConfig& matchedLocation, std::string fullPat
 	return 1;
 }
 
+
 int Client::handlePost(const LocationConfig& matchedLocation, const std::string uri) {
 	size_t lastSlash = uri.find_last_of('/');
 	std::string filename;
@@ -539,20 +518,6 @@ int Client::handleDelete(const std::string& fullPath) {
 		return 0;
 	}
 	return 1;
-}
-
-void Client::handleRead() {
-	if (_clientState == READING_HEADER) {
-		handleReadHeader();
-	} else if (_clientState == READING_BODY) {
-		handleReadBody();
-	}
-}
-
-void Client::handleWrite() {
-	if (_clientState == WRITING_RESPONSE) {
-		handleWriteResponse();
-	}
 }
 
 void Client::handleProcessing() {
@@ -648,8 +613,79 @@ void Client::handleProcessing() {
 	}
 }
 
+bool Client::shouldKeepAlive() const {
+	if (_response.getStatusCode() >= 400 && _response.getStatusCode() != 404 && _response.getStatusCode() != 405) {
+		return false;
+	}
+
+	std::map<std::string, std::string> headers = _request.getHeaders();
+	std::map<std::string, std::string>::const_iterator it = headers.find("connection");
+	std::string connVal = "";
+	if (it != headers.end()) {
+		connVal = it->second;
+	}
+
+	for (size_t i = 0; i < connVal.length(); ++i) {
+		connVal[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(connVal[i])));
+	}
+
+	if (_request.getVersion() == "HTTP/1.1") {
+		return (connVal != "close");
+	} else if (_request.getVersion() == "HTTP/1.0") {
+		return (connVal == "keep-alive");
+	}
+	return false;
+}
+
+
+void Client::handleWriteResponse() {
+	if(_bytesSent == 0 && _writeBuffer.empty()) {
+		std::vector<char> raw = _response.createResponse();
+		_writeBuffer.assign(raw.begin(), raw.end());
+	}
+	size_t remainingBytes = _writeBuffer.size() - _bytesSent;
+
+	ssize_t bytesWritten = send(_socketFd, &_writeBuffer[_bytesSent], remainingBytes, 0);
+	if(bytesWritten <= 0) {
+		setClientState(DONE); //handle error?
+		return;
+	}
+
+	_bytesSent += bytesWritten;
+
+	if(_bytesSent >= _writeBuffer.size()) {
+		if (shouldKeepAlive()) {
+			resetForNextRequest(); // set state back to reading header and clears request/response
+
+			if (_readBuffer.find("\r\n\r\n") != std::string::npos) {
+				handleReadHeader();
+			}
+		} else {
+			setClientState(DONE);
+		}
+	}
+}
+
+void Client::handleCgiPipeWait() {
+
+}
+
 void Client::handleDone() {
 
+}
+
+void Client::handleRead() {
+	if (_clientState == READING_HEADER) {
+		handleReadHeader();
+	} else if (_clientState == READING_BODY) {
+		handleReadBody();
+	}
+}
+
+void Client::handleWrite() {
+	if (_clientState == WRITING_RESPONSE) {
+		handleWriteResponse();
+	}
 }
 
 void Client::parseHeaders() {
@@ -683,12 +719,10 @@ void Client::parseHeaders() {
 
 	if (version == "HTTP/1.0" || version == "HTTP/1.1") {
 		_request.setVersion(version);
-		_response.setVersion(version);
 	}
 	else {
 		_response.setStatusCode(505); // HTTP version not supported
 		_request.setRequestState(HttpRequest::PARSE_ERROR);
-		finalizeResponse();
 		return;
 	}
 
@@ -745,39 +779,3 @@ void Client::parseHeaders() {
 	}
 }
 
-void Client::buildErrorResponse(int statusCode) {
-	_response.setStatusCode(statusCode);
-
-	std::string body;
-	bool loadedFromFile = false;
-	std::string mimeType = "text/html";
-
-	const std::map<int, std::string>& errorPages = _server.getErrorPages();
-	std::map<int, std::string>::const_iterator it = errorPages.find(statusCode);
-
-	if (it != errorPages.end()) {
-		std::string filePath = it->second;
-		// prepend root or server path if needed
-		std::ifstream file(filePath.c_str(), std::ios::in | std::ios::binary);
-		if (file.is_open()) {
-			std::ostringstream ss;
-			ss << file.rdbuf();
-			body = ss.str();
-			loadedFromFile = true;
-			mimeType = getMimeType(filePath);
-		}
-	}
-	if (!loadedFromFile) {
-        std::ostringstream ss;
-        ss << "<!DOCTYPE html><html><head><title>" << statusCode << " " 
-           << _response.getStatusMessage(statusCode)
-           << "</title></head><body><center><h1>" << statusCode << " " 
-           << _response.getStatusMessage(statusCode)
-           << "</h1></center><hr><center>webserv</center></body></html>";
-        body = ss.str();
-    }
-
-	_response.setHeader("Content-Type", mimeType);
-	_response.setBody(body);
-	finalizeResponse();
-}
