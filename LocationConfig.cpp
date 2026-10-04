@@ -26,7 +26,37 @@ LocationConfig& LocationConfig::operator=(const LocationConfig& other) {
 }
 LocationConfig::~LocationConfig() {}
 
-// Setters
+const std::string& LocationConfig::getPath() const {
+	return _path;
+}
+
+const std::string& LocationConfig::getRoot() const {
+	return _root;
+}
+
+const std::vector<std::string>& LocationConfig::getIndex() const {
+	return _index;
+}
+
+const std::vector<std::string>& LocationConfig::getAllowedMethods() const {
+	return _allowedMethods;
+}
+
+bool LocationConfig::getAutoindex() const {
+	return _autoindex;
+}
+
+const std::map<std::string, std::string>& LocationConfig::getCgiHandlers() const {
+	return _cgiHandlers;
+}
+
+const std::string& LocationConfig::getUploadStore() const {
+	return _uploadStore;
+}
+const std::pair<int, std::string>& LocationConfig::getRedirect() const {
+	return _redirect;
+}
+
 void LocationConfig::setPath(const std::string& path) {
 	_path = path;
 }
@@ -47,41 +77,14 @@ void LocationConfig::setRedirect(int statusCode, const std::string& url) {
 	_redirect = std::make_pair(statusCode, url);
 }
 
-void LocationConfig::addAllowedMethod(const std::string& method) {
-	_allowedMethods.push_back(method);
-}
-
 void LocationConfig::addIndex(const std::string& index) {
 	_index.push_back(index);
 }
 
+void LocationConfig::addAllowedMethod(const std::string& method) {
+	_allowedMethods.push_back(method);
+}
+
 void LocationConfig::addCgiHandler(const std::string& extension, const std::string& path) {
 	_cgiHandlers[extension] = path;
-}
-
-// Getters
-const std::string& LocationConfig::getPath() const {
-	return _path;
-}
-const std::vector<std::string>& LocationConfig::getAllowedMethods() const {
-	return _allowedMethods;
-}
-const std::string& LocationConfig::getRoot() const {
-	return _root;
-}
-bool LocationConfig::getAutoindex() const {
-	return _autoindex;
-}
-const std::vector<std::string>& LocationConfig::getIndex() const {
-	return _index;
-}
-const std::map<std::string, std::string>& LocationConfig::getCgiHandlers() const {
-	return _cgiHandlers;
-}
-
-const std::string& LocationConfig::getUploadStore() const {
-	return _uploadStore;
-}
-const std::pair<int, std::string>& LocationConfig::getRedirect() const {
-	return _redirect;
 }
