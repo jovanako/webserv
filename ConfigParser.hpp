@@ -14,13 +14,13 @@ class ConfigParser {
     	size_t                      _currentTokenIndex;
     	std::vector<ServerConfig>   _servers;
 
-		// Helper functions for parsing
-		void tokenize();
-		void parseServerBlock();
-		void parseErrorPage(ServerConfig& server);
-		void parseLocationBlock(ServerConfig& server);
-		void verifyToken(const std::string& expected);
-		size_t parseSize(const std::string& sizeStr);
+		void	tokenize();
+		void	parseServerBlock();
+		void	parseErrorPage(ServerConfig& server);
+		void	parseLocationBlock(ServerConfig& server);
+		void	verifyToken(const std::string& expected);
+		size_t	parseSize(const std::string& sizeStr);
+		
 	public:
 		ConfigParser();
 		ConfigParser(std::string filePath);

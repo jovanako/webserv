@@ -21,16 +21,16 @@ public:
     };
 
 private:
-    ParsingState _parseState;
-    std::string _method;
-    std::string _uri;
-	std::string _queryString;
-    std::string _version;
-    std::map<std::string, std::string> _headers;
-    std::vector<char> _body;
-    size_t _contentLength;
-    int _errorCode;
-	bool _isChunked;
+    ParsingState						_parseState;
+    std::string							_method;
+    std::string							_uri;
+	std::string							_queryString;
+    std::string							_version;
+    std::map<std::string, std::string>	_headers;
+    std::vector<char>					_body;
+    size_t								_contentLength;
+    int									_errorCode;
+	bool								_isChunked;
 
 public:
     HttpRequest();
@@ -47,16 +47,16 @@ public:
     void setErrorCode(int code);
 
     // Getters
-	ParsingState getRequestState() const;
-    const std::string& getMethod() const;
-    const std::string& getUri() const;
-	const std::string& getQueryString() const;
-    const std::string& getVersion() const;
-    const std::map<std::string, std::string>& getHeaders() const;
-    const std::vector<char>& getBody() const;
-    size_t getContentLength() const;
-    int getErrorCode() const;
-	bool isChunked() const;
+	ParsingState								getRequestState() const;
+    const std::string&							getMethod() const;
+    const std::string&							getUri() const;
+	const std::string&							getQueryString() const;
+    const std::string&							getVersion() const;
+    const std::map<std::string, std::string>&	getHeaders() const;
+    const std::vector<char>&					getBody() const;
+    size_t										getContentLength() const;
+    int											getErrorCode() const;
+	bool										isChunked() const;
 
 	void addHeader(const std::string& key, const std::string& value);
     void appendBody(const char* data, size_t size);

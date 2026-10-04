@@ -211,18 +211,3 @@ void ServerManager::run() {
 		}
 	}
 }
-
-/*
-CGI I/O that can wait for data must be non-blocking and driven by poll()
-
-Pipes created for child CGI stdin/stdout are I/O descriptors that 
-can block. Reading or writing to pipes without monitoring them in 
-your main poll() loop can cause deadlocks on large CGI payloads, 
-violating the rule: "Calling read/recv or write/send on these 
-descriptors without prior readiness will result in a grade of 0".
-
-Clients must be able to upload files" and "At least GET, POST, 
-DELETE methods
-
-In Client.cpp, file serving, autoindex generation, POST file 
-uploading, and DELETE handling are currently empty stubs or comments.*/

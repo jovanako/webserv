@@ -6,32 +6,29 @@
 #include <vector>
 
 class HttpResponse {
-private:
-    int                                 _statusCode;
-    std::string                         _statusMessage;
-    std::string                         _version;
-    std::map<std::string, std::string>  _headers;
-    std::vector<char>                   _body;
-
-	
+	private:
+		std::string							_version;
+		int									_statusCode;
+		std::string							_statusMessage;
+		std::map<std::string, std::string>	_headers;
+		std::vector<char>					_body;
+		
 	public:
-    HttpResponse();
-	HttpResponse(const HttpResponse& other);
-	HttpResponse& operator=(const HttpResponse& other);
-    ~HttpResponse();
-	
-	int getStatusCode() const;
-    std::string getStatusMessage(int code) const;
-	std::vector<char> getBody() const;
-	
-    // Setters for generating the response
-    void setStatusCode(int code);
-    void setHeader(const std::string& key, const std::string& value);
-    void setBody(const std::vector<char>& body);
-    void setBody(const std::string& body);
+		HttpResponse();
+		HttpResponse(const HttpResponse& other);
+		HttpResponse& operator=(const HttpResponse& other);
+		~HttpResponse();
+		
+		int					getStatusCode() const;
+		std::string			getStatusMessage(int code) const;
+		std::vector<char>	getBody() const;
+		
+		void setStatusCode(int code);
+		void setHeader(const std::string& key, const std::string& value);
+		void setBody(const std::vector<char>& body);
+		void setBody(const std::string& body);
 
-    // Converts the object into raw bytes ready to pass to send()
-    std::vector<char> createResponse() const;
+		std::vector<char> createResponse() const;
 };
 
 #endif

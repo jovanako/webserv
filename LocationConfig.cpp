@@ -30,26 +30,33 @@ LocationConfig::~LocationConfig() {}
 void LocationConfig::setPath(const std::string& path) {
 	_path = path;
 }
-void LocationConfig::addAllowedMethod(const std::string& method) {
-	_allowedMethods.push_back(method);
-}
+
 void LocationConfig::setRoot(const std::string& root) {
 	_root = root;
 }
+
 void LocationConfig::setAutoindex(bool autoindex) {
 	_autoindex = autoindex;
 }
-void LocationConfig::addIndex(const std::string& index) {
-	_index.push_back(index);
-}
-void LocationConfig::addCgiHandler(const std::string& extension, const std::string& path) {
-	_cgiHandlers[extension] = path;
-}
+
 void LocationConfig::setUploadStore(const std::string& uploadStore) {
 	_uploadStore = uploadStore;
 }
+
 void LocationConfig::setRedirect(int statusCode, const std::string& url) {
 	_redirect = std::make_pair(statusCode, url);
+}
+
+void LocationConfig::addAllowedMethod(const std::string& method) {
+	_allowedMethods.push_back(method);
+}
+
+void LocationConfig::addIndex(const std::string& index) {
+	_index.push_back(index);
+}
+
+void LocationConfig::addCgiHandler(const std::string& extension, const std::string& path) {
+	_cgiHandlers[extension] = path;
 }
 
 // Getters

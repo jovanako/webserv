@@ -18,7 +18,6 @@ private:
     std::pair<int, std::string>        _redirect;
 
 public:
-    // Default constructor
     LocationConfig();
 	LocationConfig(const LocationConfig& other);
 	LocationConfig& operator=(const LocationConfig& other);
@@ -36,14 +35,14 @@ public:
     void addCgiHandler(const std::string& extension, const std::string& path);
 
     // Getters
-    const std::string&                  getPath() const;
-    const std::vector<std::string>&     getAllowedMethods() const;
-    const std::string&                  getRoot() const;
-    bool                                getAutoindex() const;
-    const std::vector<std::string>&     getIndex() const;
+    const std::string&                  		getPath() const;
+    const std::vector<std::string>&     		getAllowedMethods() const;
+    const std::string&                  		getRoot() const;
+    bool                                		getAutoindex() const;
+    const std::vector<std::string>&     		getIndex() const;
     const std::map<std::string, std::string>&   getCgiHandlers() const;
-    const std::string&                  getUploadStore() const;
-    const std::pair<int, std::string>&  getRedirect() const;
+    const std::string& 							getUploadStore() const;
+	const std::pair<int, std::string>&  		getRedirect() const;
 };
 
 #endif

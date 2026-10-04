@@ -43,7 +43,7 @@ int ServerConfig::getPort() const {
 	return _port;
 }
 
-const std::string& ServerConfig::getPortString() const {
+std::string ServerConfig::getPortString() const {
 	std::ostringstream oss;
     oss << _port;
     return oss.str();

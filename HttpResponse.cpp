@@ -22,6 +22,10 @@ HttpResponse &HttpResponse::operator=(const HttpResponse& other) {
 
 HttpResponse::~HttpResponse() {}
 
+int HttpResponse::getStatusCode() const {
+	return _statusCode;
+}
+
 std::string HttpResponse::getStatusMessage(int code) const {
     switch (code) {
         // 2xx Success
@@ -59,14 +63,9 @@ std::string HttpResponse::getStatusMessage(int code) const {
     }
 }
 
-int HttpResponse::getStatusCode() const {
-	return _statusCode;
-}
-
 std::vector<char> HttpResponse::getBody() const {
 	return _body;
 }
-
 
 // Setters for generating the response
 void HttpResponse::setStatusCode(int code) {

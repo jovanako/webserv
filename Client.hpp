@@ -12,60 +12,72 @@
 #include <dirent.h>
 
 class Client {
-public:
-    enum ConnectionState {
-        READING_HEADER,
-        READING_BODY,
-        PROCESSING,
-        WRITING_RESPONSE,
-        CGI_PIPE_WAIT,
-        DONE
-    };
-
-private:
-	static const int	BUFFER_SIZE = 4096;
-    int                 _socketFd;
-    ConnectionState     _clientState;       // <--- The variable tracking where this client is
-    HttpRequest         _request;
-    HttpResponse        _response;
-	ServerConfig		_server;
-	std::string			_readBuffer;
-	std::vector<char>	_writeBuffer;
-	size_t				_bytesSent;
-	std::vector<ServerConfig> _virtualHosts;
-    // ... buffers, timers, etc.
-
-	void handleReadHeader();
-	void handleReadBody();
-	void handleWriteResponse();
-	void handleCgiPipeWait();
-	bool shouldKeepAlive() const;
-	void finalizeResponse();
-	void resetForNextRequest();
-	std::string makeFullPath(const LocationConfig& matchedLocation, const std::string uri);
-	int handleGet(const LocationConfig& matchedLocation, std::string fullPath, const std::string uri);
-	int handlePost(const LocationConfig& matchedLocation, const std::string uri);
-	int handleDelete(const std::string& fullPath);
-	
 	public:
-	Client();
-    Client(int fd);
-	Client(const Client& other);
-	Client& operator=(const Client& other);
-    ~Client();
-	
-    ConnectionState getClientState() const;
-    void setClientState(ConnectionState state);
-	void setServer(const ServerConfig& server);
-	void setVirtualHosts(const std::vector<ServerConfig>& hosts);
-	
-	void handleRead();
-	void handleWrite();
-	void handleProcessing();
-	void handleDone();
-    
-	void parseHeaders();
-	void buildErrorResponse(int statusCode);
+		enum ConnectionState {
+			READING_HEADER,
+			READING_BODY,
+			PROCESSING,
+			WRITING_RESPONSE,
+			CGI_PIPE_WAIT,
+			DONE
+		};
+
+	private:
+		static const int			BUFFER_SIZE = 4096;
+		int                 		_socketFd;
+		ConnectionState     		_clientState;
+		HttpRequest         		_request;
+		HttpResponse        		_response;
+		ServerConfig				_server;
+		std::string					_readBuffer;
+		std::vector<char>			_writeBuffer;
+		size_t						_bytesSent;
+		std::vector<ServerConfig>	_virtualHosts;
+		// ... buffers, timers, etc.
+
+		void		handleReadHeader();
+		void		handleReadBody();
+		void		handleWriteResponse();
+		void		handleCgiPipeWait();
+		bool		shouldKeepAlive() const;
+		void		finalizeResponse();
+		void		resetForNextRequest();
+		std::string	makeFullPath(const LocationConfig& matchedLocation, const std::string uri);
+
+		int			handleGet(const LocationConfig& matchedLocation, std::string fullPath, const std::string uri);
+		int			handlePost(const LocationConfig& matchedLocation, const std::string uri);
+		int			handleDelete(const std::string& fullPath);
+		
+	public:
+		Client();
+		Client(int fd);
+		Client(const Client& other);
+		Client& operator=(const Client& other);
+		~Client();
+				
+		void handleRead();
+		void handleWrite();
+		void handleProcessing();
+		void handleDone();
+		
+		void parseHeaders();
+		void buildErrorResponse(int statusCode);
+		
+		ConnectionState						getClientState() const;
+		int									getSocketFd() const;
+		const HttpRequest&					getRequest() const;
+		const HttpResponse&					getResponse() const;
+		const ServerConfig&					getServer() const;
+		const std::vector<ServerConfig>&	getVirtualHosts() const;
+		const std::string&					getReadBuffer() const;
+		const std::vector<char>&			getWriteBuffer() const;
+		size_t								getBytesSent() const;
+
+		void setClientState(ConnectionState state);
+		void setServer(const ServerConfig& server);
+		void setVirtualHosts(const std::vector<ServerConfig>& hosts);
+		void setReadBuffer(const std::string& buffer);
+		void setWriteBuffer(const std::vector<char>& buffer);
 };
 
 #endif
