@@ -38,3 +38,13 @@ Finally, the `||` (OR) operator evaluates the two halves:\
 `false || true` evaluates to `true`.
 
 Because the combined statement is `true`, the code will enter the `if` block and successfully throw the `std::runtime_error`, protecting your server from the invalid `"10X"` input.
+
+# `interface:port`
+
+To satisfy the requirement to handle `interface:port` pairs, the parser must account for three common scenarios in a `listen` directive:
+
+1. **Port only:** `listen 8080;` (Should default the host to `0.0.0.0`)
+
+2. **Interface and Port:** `listen 127.0.0.1:8080;`
+
+3. **Interface only (Optional but good practice):** `listen 127.0.0.1;` (Should default the port to `80`)

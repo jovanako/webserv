@@ -68,14 +68,41 @@ void ConfigParser::parseServerBlock() {
 		std::string directive = getNextToken();
 
 		if (directive == "listen") {
-			std::string port = getNextToken();
+			std::string token = getNextToken();
+			std::string host = "0.0.0.0"; // default host if none is provided
+			std::string portStr = token;
 
-			for (size_t i = 0; i < port.length(); ++i) {
-				if (!std::isdigit(static_cast<unsigned char>(port[i]))) {
-					throw std::runtime_error("Config Error: Invalid port '" + port + "'");
+			// check if the token contains a colon (interface:port)
+			size_t colonPos = token.find(':');
+			if (colonPos != std::string::npos) {
+				host = token.substr(0, colonPos);
+				portStr = token.substr(colonPos + 1);
+			}
+			// check if the token is just an IP address (contains dots but no colon)
+			else if (token.find('.') != std::string::npos) {
+				host = token;
+				portStr = "80"; // default HTTP port
+			}
+
+			// validate that the port string is not empty and contains only digits
+			if (portStr.empty()) {
+				throw std::runtime_error("Config Error: Missing port in listen directive");
+			}
+			for (size_t i = 0; i < portStr.length(); ++i) {
+				if (!std::isdigit(static_cast<unsigned char>(portStr[i]))) {
+					throw std::runtime_error("Config Error: Invalid port '" + portStr + "'");
 				}
 			}
-			server.setPort(std::atoi(port.c_str()));
+
+			// convert and validate port range (1 - 65535)
+			int port = std::atoi(portStr.c_str());
+			if (port < 1 || port > 65535) {
+				throw std::runtime_error("Config Error: Port out of range '" + portStr + "'");
+			}
+
+			// save both to the ServerConfig object
+			server.setHost(host);
+			server.setPort(port);
 			verifyToken(";");
 		}
 		else if (directive == "server_name") {
