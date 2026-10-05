@@ -167,9 +167,6 @@ void ConfigParser::parseLocationBlock(ServerConfig &server) {
 	LocationConfig location;
 	bool index_present = false;
 
-	std::vector<std::string> cgiExts;
-	std::vector<std::string> cgiPaths;
-
 	location.setPath(getNextToken());
 
 	verifyToken("{");
@@ -199,7 +196,13 @@ void ConfigParser::parseLocationBlock(ServerConfig &server) {
 			}
 
 			while (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] != ";") {
-				location.addAllowedMethod(getNextToken());
+				std::string method = getNextToken();
+
+				// validate against supported HTTP methods
+				if (method != "GET" && method != "POST" && method != "DELETE") {
+					throw std::runtime_error("ConfigError: Invalid or unsupported method '" + method + "' in allow_methods directive");
+				}
+				location.addAllowedMethod(method);
 			}
 			verifyToken(";");
 		}
@@ -218,22 +221,16 @@ void ConfigParser::parseLocationBlock(ServerConfig &server) {
 			location.setUploadStore(getNextToken());
 			verifyToken(";");
 		}
-		else if (directive == "cgi_ext"){
-			if (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] == ";") {
-				throw std::runtime_error("Config Error: 'cgi_ext' directive requires at least one extension argument");
+		else if (directive == "cgi_pass"){
+			std::string extension = getNextToken();
+			if (extension == ";") {
+				throw std::runtime_error("Config Error: 'cgi_pass' requires an extension argument (e.g., .py)");
 			}
-			while (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] != ";") {
-				cgiExts.push_back(getNextToken());
+			std::string path = getNextToken();
+			if (path == ";") {
+				throw std::runtime_error("Config Error: 'cgi_pass' requires an executable path argument");
 			}
-			verifyToken(";");
-		}
-		else if (directive == "cgi_path") {
-			if (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] == ";") {
-				throw std::runtime_error("Config Error: 'cgi_path' directive requires at least one path argument");
-			}
-			while (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] != ";") {
-				cgiPaths.push_back(getNextToken());
-			}
+			location.addCgiHandler(extension, path);
 			verifyToken(";");
 		}
 		else if (directive == "return") {
@@ -259,13 +256,7 @@ void ConfigParser::parseLocationBlock(ServerConfig &server) {
 
 	if (!index_present)
 		location.addIndex("index.html");
-
-	if (cgiExts.size() != cgiPaths.size()) {
-		throw std::runtime_error("Config Error: Count mismatch between cgi_ext and cgi_path");
-	}
-	for (size_t i = 0; i < cgiExts.size(); ++i) {
-		location.addCgiHandler(cgiExts[i], cgiPaths[i]);
-	}
+		
 	server.addLocation(location);
 }
 
