@@ -21,20 +21,6 @@ ServerConfig& ServerConfig::operator=(const ServerConfig& other) {
 
 ServerConfig::~ServerConfig() {}
 
-// Setters
-void ServerConfig::setHost(const std::string& host) {
-	_host = host;
-}
-
-void ServerConfig::setPort(int port) {
-	_port = port;
-}
-
-void ServerConfig::setClientMaxBodySize(size_t size) {
-	_clientMaxBodySize = size;
-}
-
-// Getters
 const std::string& ServerConfig::getHost() const {
 	return _host;
 }
@@ -63,6 +49,18 @@ size_t ServerConfig::getClientMaxBodySize() const {
 
 const std::vector<LocationConfig>& ServerConfig::getLocations() const {
 	return _locations;
+}
+
+void ServerConfig::setHost(const std::string& host) {
+	_host = host;
+}
+
+void ServerConfig::setPort(int port) {
+	_port = port;
+}
+
+void ServerConfig::setClientMaxBodySize(size_t size) {
+	_clientMaxBodySize = size;
 }
 
 void ServerConfig::addLocation(const LocationConfig& location) {

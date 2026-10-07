@@ -354,8 +354,8 @@ The number returned by `recv()` is critical for your state machine logic, dictat
 
 *Server Action*: Handle the error or wait for the next `poll()` event.
 
-> **The Non-Blocking Requirement in Webserv**\
-Because your project strictly requires all sockets to be non-blocking, `recv()` behaves differently than standard blocking I/O. If you call `recv()` and there is no data waiting on the socket, it will not pause your program to wait for data. Instead, it instantly returns `-1`.\
+> **The Non-Blocking Requirement in Webserv**  
+Because your project strictly requires all sockets to be non-blocking, `recv()` behaves differently than standard blocking I/O. If you call `recv()` and there is no data waiting on the socket, it will not pause your program to wait for data. Instead, it instantly returns `-1`.  
  \
 To prevent wasting CPU cycles constantly checking empty sockets, your server must never call `recv()` unless `poll()` (or `select`/`epoll`) has already confirmed that the socket has data to be read. Calling `recv()` on a descriptor without prior readiness notification from your event loop is a severe violation of the project rules.
 

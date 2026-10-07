@@ -22,16 +22,8 @@ class ServerConfig {
 		ServerConfig(const ServerConfig& other);
 		ServerConfig& operator=(const ServerConfig& other);
 		~ServerConfig();
-
-		// Setters (used by your config file parser)
-		void setHost(const std::string& host);
-		void setPort(int port);
-		void addServerName(const std::string& name);
-		void addErrorPage(int statusCode, const std::string& errorFilePath);
-		void setClientMaxBodySize(size_t size);
-		void addLocation(const LocationConfig& location);
-
-		// Getters (used by your request handler to make routing decisions)
+		
+		// Getters (used by request handler to make routing decisions)
 		const std::string&                  getHost() const;
 		int                                 getPort() const;
 		std::string							getPortString() const;
@@ -39,6 +31,15 @@ class ServerConfig {
 		const std::map<int, std::string>&   getErrorPages() const;
 		size_t                              getClientMaxBodySize() const;
 		const std::vector<LocationConfig>&  getLocations() const;
+
+		// Setters (used by config file parser)
+		void setHost(const std::string& host);
+		void setPort(int port);
+		void setClientMaxBodySize(size_t size);
+		void addLocation(const LocationConfig& location);
+		void addServerName(const std::string& name);
+		void addErrorPage(int statusCode, const std::string& errorFilePath);
+
 };
 
 #endif

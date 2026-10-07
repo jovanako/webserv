@@ -1,4 +1,4 @@
-# `throw`
+# -> `throw`
 
 You do not need to add a `return` statement after throwing an exception.
 
@@ -6,7 +6,7 @@ In C++, the `throw` keyword immediately halts the normal execution flow of the f
 
 Because execution completely stops at the `throw` statement, any code placed directly after it - including a `return` - is completely unreachable. Most modern compilers will flag a subsequent `return` statement with an "unreachable code" warning.
 
-# `insert`
+# -> `insert`
 
 The `std::string::insert` function shifts existing characters to the right to make room for the new content.
 
@@ -14,7 +14,7 @@ For example: `line.insert(i, " ");` places a space exactly at index `i`. This fo
 
 Because the string has grown by two characters and the special character has been shifted, the code then executes `i += 2` to skip past the newly inserted spaces and avoid analyzing the same character again on the next loop iteration.
 
-# `parseSize()`
+# -> `parseSize()`
 
 In the case we get an input of "10X" for `sizeStr`:
 
@@ -34,12 +34,12 @@ When we reach the evaluation `if (!(iss >> value) || !iss.eof())`, here is how i
 
 - `!iss.eof()`: Since `iss.eof()` is `false`, the negation makes this part `true`.
 
-Finally, the `||` (OR) operator evaluates the two halves:\
+Finally, the `||` (OR) operator evaluates the two halves:  
 `false || true` evaluates to `true`.
 
 Because the combined statement is `true`, the code will enter the `if` block and successfully throw the `std::runtime_error`, protecting your server from the invalid `"10X"` input.
 
-# `interface:port`
+# -> `interface:port`
 
 To satisfy the requirement to handle `interface:port` pairs, the parser must account for three common scenarios in a `listen` directive:
 
@@ -49,8 +49,42 @@ To satisfy the requirement to handle `interface:port` pairs, the parser must acc
 
 3. **Interface only (Optional but good practice):** `listen 127.0.0.1;` (Should default the port to `80`)
 
-# `size_t` overflow
+# -> Port range 1 - 65535
+
+The port range of 1 to 65535 exists because the underlying  TCP and UDP networking protocols allocate exactly 16 bits for the port number field within their packet headers.
+
+- **The Math:** A 16-bit unsigned integer can hold 2^16 (or 65,536) distinct values, ranging from 0 to 65535.
+
+- **Port 0:** While 0 is technically part of the 16-bit range, it is specially reserved in network programming to act as a wildcard (telling the operating system to automatically assign any available ephemeral port). Therefore, the actual usable ports for explicitly listening or connecting range from 1 to 65535, which your `ConfigParser` and `HttpRequest` classes strictly validate.
+
+# -> `size_t` overflow
 
 In C++98, you can find the maximum value of a `size_t` by using `(size_t)-1` (or by including `<limits>`)
 
-# `value > maxSize / multiplier
+# -> `value > maxSize / multiplier
+
+This condition is a standard mathematical trick used in C++ to prevent integer overflow *before* it actually happens.
+
+Here is exactly how and why it works:
+
+- **The Goal:** We want to know if multiplying our parsed number by the unit multiplier (e.g., `value * multiplier`) will result in a number larger than what a `size_t` variable can hold (`maxSize`).
+
+- **The Trap:** If you simply write `if (value * multiplier > maxSize)`, the C++ compiler performs the multiplication *first*. If the result is larger than `maxSize`, the integer silently overflows and wraps around to a very small incorrect number. By the time the `>` comparison evaluates, it is comparing that tiny wrapped-around number against `maxSize`, meaning the overflow check completely fails.
+
+- **The Algebraic Fix:** If we take the mathematical inequality `value * multiplier > maxSize` and divide both sides by `multiplier`, we get `value > maxSize / multiplier`.
+
+By dividing instead of multiplying, the numbers get smaller. Calculating `maxSize / multiplier` is completely safe and impossible to overflow. This allows the program to safly look ahead and determine if the multiplication *would* be too big, without ever actually executing the dangerous multiplication step.
+
+# -> `(size_t)-1`
+
+`size_t` is an **unsigned** integer. It cannot hold negative numbers; it only undesrstands zero and positive numbers.
+
+When you try to force a negative number like `-1` into an unsigned variable, the computer handles it by "wrapping around".
+
+What happens:
+
+1. You start with `0`.
+
+2. You subtract `1` (which is what casting `-1` to an unsigned type effectively does).
+
+3. Because the variable can't go below zero, it rolls backward past zero and lands on the absolute highest number that variable's memory can physically hold.
