@@ -1,4 +1,4 @@
-# `_redirect`
+# --> `_redirect`
 
 The `_redirect` variable is an `std::pair<int, std::string>` because an HTTP redirection inherently requires two distinct but tightly coupled pieces of information to function correctly:
 
@@ -6,7 +6,7 @@ The `_redirect` variable is an `std::pair<int, std::string>` because an HTTP red
 
 - **The Target URL (`std::string` / `.second`):** The new destination path or URL where the client should be sent.
 
-# `std::map` vs `std::pair`
+# --> `std::map` vs `std::pair`
 
 An `std::pair` is a simple data structure that holds exactly two linked values, while an `std::map` is a container that stores an entire collection of pairs, allowing you to look up values using unique keys.
 

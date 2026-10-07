@@ -12,6 +12,8 @@
 #include <unistd.h>
 #include <poll.h>
 #include <netdb.h>
+#include <cerrno>
+#include <iostream>
 
 class ServerManager {
 	private:

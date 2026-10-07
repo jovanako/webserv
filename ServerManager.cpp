@@ -22,9 +22,15 @@ ServerManager& ServerManager::operator=(const ServerManager& other) {
 ServerManager::~ServerManager() {}
 
 void ServerManager::acceptClient(int listenFd, std::vector<struct pollfd>& pendingFds) {
-	int clientFd = accept(listenFd, NULL, NULL); // check NULL if correct
-	if (clientFd < 0)
-		return; // handle error or EAGAIN
+	int clientFd = accept(listenFd, NULL, NULL);
+	if (clientFd < 0) {
+		if (errno != EAGAIN && errno != EWOULDBLOCK) {
+			// log the actual error, but do NOT exit the program
+			std::cerr << "Error: accept() failed for listenFd " << listenFd
+					  << " (errno: " << errno << ")\n";
+		}
+		return; // safely exit the function to keep the server loop running
+	}
 	
 	fcntl(clientFd, F_SETFL, O_NONBLOCK);
 

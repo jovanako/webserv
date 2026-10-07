@@ -1,4 +1,4 @@
-# ParsingState
+# --> ParsingState
 
 The `ParsingState` enum in `HttpRequest` acts as a state machine tracker necessary for managing the lifecycle of an incoming HTTP request in a non-blocking environment. Since the server is strictly required to remain non-blocking at all times and use `poll()` (or equivalent) for I/O operations, a single network read might not capture an entire HTTP request at once. The server needs this enum to remember exactly where the parsing process left off so it can resume correctly when the next chunk of data arrives.
 
@@ -10,7 +10,7 @@ Here is why `ParsingState` is specifically required in your implementation:
 
 - **Triggering Error Responses:** The `Client` class actively monitors this state during the parsing phase. If it detects that `_request.getRequestState() == HttpRequest::PARSE_ERROR`, it immediately stops extracting data, sets the response status code to the trapped error, and finalizes the response to send back to the client.
 
-# `std::vector<char> _body`
+# --> `std::vector<char> _body`
 
 The `_body` variable is defined as an `std::vector<char>` primarily to safely handle raw binary data.
 
@@ -20,7 +20,7 @@ The `_body` variable is defined as an `std::vector<char>` primarily to safely ha
 
 - **Contiguous Memory:** It provides a dynamic, contiguous block of memory. This makes it straightforward to eventually write the payload out to a file descriptor, pass it to a CGI script, or save it to a designated upload directory.
 
-# Payload
+# --> Payload
 
 In computing and networking, a **payload** is the actual, essential data being transmitted in a message, excluding the metadata or routing information needed to get it to its destination.
 
@@ -32,7 +32,7 @@ Think of a network request like a physical package:
 
 In the context of your HTTP server project, the payload is the request or response "body". For example, if a user uploads a file to your server, the raw binary data of that file is the payload, which your `HttpRequest` stores in its `_body` vector. If that payload exeeds the allowed size limits, your server rejects it with a 413 "Payload Too Large" error.
 
-# Percent-Encoding
+# --> Percent-Encoding
 
 Percent-Encoding strictly represents exactly one 8-bit byte of data. Because of how hexadecimal math works, it takes exactly two hexadecimal digits to represent a full byte.
 
@@ -43,7 +43,7 @@ If the standard allowed only one digit (like `%2`), it would only provide half a
 
 According to the official URI specification (RFC 3986), the format must always be exactly `%` followed by two valid hex digits. For example, a space is always `%20` (hex 20, decimal 32). If a client sends `%2`, it is incomplete. If a client sends `%20A`, the server interprets the `%20` as a space, and the `A` is just treated as the next normal letter in the URL.
 
-# iss >> std::hex >> value
+# --> `iss >> std::hex >> value`
 
 ```
 for (size_t i = 0; i < input.length(); ++i) {
@@ -68,7 +68,7 @@ This is where the actual conversion happens. The `std::hex` part is a stream man
 - `decoded += static_cast<char>(value);`\
 Finally, the integer `32` is converted into a standard character. In the ASCII table, 32 corresponds to the space character (`' '`). The `static_cast<char>` ensures the compiler safely narrows the 4-byte integer into a 1-byte character without warnings. The space is then appended to the final `decoded` string.
 
-# `static_cast<unsigned char>`
+# --> `static_cast<unsigned char>`
 
 The cast to `unsigned char` in `isValidHeaderKey()` guarantees that the byte is evaluated as a positive integer (from 0 to 255) to ensure predictable and safe mathematical comparisons.
 
@@ -78,7 +78,7 @@ If a client sends an extended ASCII character or raw binary byte with a value of
 
 The immediate next line in the code evaluates the bounds: `if (c <= 32 || c >= 127)`. By explicitly casting the character to an `unsigned char` first, you prevent any negative number wrap-around. A byte with a value of 150 will strictly be evaluated as the positive integer 150, which cleanly and safely triggers the `c >= 127` rejection condition.
 
-# `isValidIpv4()`
+# --> `isValidIpv4()`
 
 - `std::istringstream ss(host);`\
 Creates a string stream from the `host` string, allowing the code to easily parse it like an input stream.
@@ -101,7 +101,7 @@ Extracts the numerical value from the string stream into `val`.
 - `if (segment.length() > 1 && segment[0] == '0')`\
 Rejects leading zeroes because they can be dangerously misinterpreted by some systems as octal (base-8) numbers rather than decimal.
 
-# Domain
+# --> Domain
 
 ### Examples ov Valid Domains
 
@@ -119,7 +119,7 @@ Rejects leading zeroes because they can be dangerously misinterpreted by some sy
 - `webserv_site.com` (underscores are forbidden in standard hostnames)
 - `999.1.2.3` (all-numeric final label, which makes it an invalid IP rather than a valid domain)
 
-# `std::istringstream` vs. `std::ostringstream`
+# --> `std::istringstream` vs. `std::ostringstream`
 
 Use `std::istringstream` when you need to read from or parse an existing string, and use `std::ostringstream` when you need to write to or construct a new string.
 
@@ -135,7 +135,7 @@ Use `std::istringstream` when you need to read from or parse an existing string,
 
 - **Best For:** Generating complex text outputs (like HTML or JSON), dynamically building file paths, or converting numbers into strings (which is especially necessary in C++98 where `std::to_string` is unavailable).
 
-# `>>` vs. `<<`
+# --> `>>` vs. `<<`
 
 - **Use `>>` (Extraction/Input) to read data.**\
 The arrows point *towards* your variables. Data flows out of the stream (like `std::cin` or `istringstream`) and into your code.\

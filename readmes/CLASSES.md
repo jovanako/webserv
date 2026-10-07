@@ -1,4 +1,4 @@
-# HttpRequest
+# --> HttpRequest
 
 ### Responsibility 
 Represents and encapsulates a parsed client HTTP request. It acts as a data container and state tracker that stores the HTTP method (e.g. `GET`, `POST`, `DELETE`), target URI, HTTP protocol version, key-value request headers, and the raw payload body. It also tracks parsing progress through its `ParsingState` machine (`PARSE_REQUEST_LINE`, `PARSE_HEADERS`, `PARSE_BODY`, `PARSE_DONE`, `PARSE_ERROR`) and preserves any parsing error code encountered.
@@ -14,7 +14,7 @@ Operates in the **request parsing** and **ingestion** layer, specifically during
 
 -  **CGI Executor:** Supplies environment variables (derived from `_uri`, `_headers`, and `_method`) and passes `_body` through pipes to the standard input of the child CGI process.
 
-# HttpResponse
+# --> HttpResponse
 
 ### Responsibility
 
@@ -32,7 +32,7 @@ Operates in the **response dispatch** and **network output** layer, directly bef
 
 - **Client/Socket Manager:** Calls `createResponse()` to retrieve the raw `std::vector<char>` buffer and sends it through non-blocking `write()`/`send()` calls monitored by the central event loop (`poll()` or equivalent).
 
-# LocationConfig
+# --> LocationConfig
 
 ### Responsibility
 
@@ -50,7 +50,7 @@ Belongs to the **configuration parsing** and **route-resolution** domain.
 
 - **HttpResponse Generator:** Directly influences status codes and headers; for example, if `getRedirect()` is set, the server uses its target URL to set a `3xx` redirect on the `HttpResponse`.
 
-# Client
+# --> Client
 
 ### Responsibility
 
@@ -70,7 +70,7 @@ Acts as the **central session coordinator and bridge between raw network socket 
 
 - **ServerConfig & LocationConfig:** Holds a copy/reference of the associated `ServerConfig` (`_server`). During `handleProcessing()`, it inspects configured locations to enforce allowed HTTP methods, body size restrictions, root directory targets, redirections, and CGI mappings.
 
-# ServerConfig
+# --> ServerConfig
 ### Responsibility
 
 Acts as a data container storing configuration parameters for a single virtual host or server block. This includes host interface binding address (`_host`, default `0.0.0.0`), port(`_port`, default `8080`), server domain names (`_serverNames`), custom error page mappings (`_errorPages`), maximum allowed request payload size (`_clientMaxBodySize`), and route definitions stored in a list of `LocationConfig` objects.
@@ -89,7 +89,7 @@ Resides in the static configuration model, establishing the boundaries, limits, 
 
 - **LocationConfig:** Holds a collection (`std::vector<LocationConfig>`) of nested route configurations via `addLocation()` and `getLocations()`.
 
-# ConfigParser
+# --> ConfigParser
 
 ### Responsibility
 Reads, lexes, validates, and parses the NGINX-style configuration file. It strips comments (`#`), pads syntax tokens (`{`, `}`, `;`), tokenizes the input file stream into strings, enforces grammar rules via `verifyToken()`, parses human-readable storage suffixes (`K`, `M`, `G`) into byte values via `parseSize()`, and builds fully initialized `ServerConfig` objects (including nested location blocks and error page directives).
@@ -106,7 +106,7 @@ Operates in the pre-runtime/initialization phase before socket creation or event
 
 - **ServerManager:** The parsed `std::vector<ServerConfig>` returned by `parse()` is passed directly to the constructor of `ServerManager` to boot up the web server.
 
-# ServerManager
+# --> ServerManager
 
 ### Responsibility
 Orchestrates the core server runtime, multi-port socket lifecycle, and central I/O event multiplexing loop. It uses `getaddrinfo()`, `socket()`, `setsockopt(SO_REUSEADDR)`, `bind()`, and `listen()` to create non-blocking listening sockets for every configured server block, registers all listening and client file descriptors into a single `poll()` vector (`_pollFds`), handles connection acceptance via `accept()`, dispatches I/O events, and handles client cleanup/closure upon disconnects or errors.

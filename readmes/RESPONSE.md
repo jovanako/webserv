@@ -1,4 +1,4 @@
-# Difference between the two `setBody()` functions
+# --> Difference between the two `setBody()` functions
 
 The two `setBody` functions are overloaded methods that allow the `HttpResponse` class to seamlessly accept either raw byte arrays or standard text strings for the response payload.
 
@@ -24,7 +24,7 @@ void HttpResponse::setBody(const std::string& body) {
 	* **Mechanism:** Uses the iterator-based `.assign()` method (`_body.assign(body.begin(), body.end());`). Since sn `std::string` cannot be directly assigned to an `std::vector<char>` using the `=` operator, this method iterates from the beginning to the end of the string, copying each character into the internal vector.
 	* **Use Case:** Acts as a convenience wrapper for text-based payloads. It allows the server to pass HTML strings (like dynamically generated error pages or auto-indexes) directly into the response without forcing the caller to manually convert the string to a vector first.
 
-	# `createResponse()`
+	# --> `createResponse()`
 
 	The `createResponse()` function converts the internal state of an `HttpResponse` object into a single sequence of raw bytes (`std::vector<char>`) so it is ready to be transmitted over the network vie the `send()` socket function.
 
@@ -38,7 +38,7 @@ void HttpResponse::setBody(const std::string& body) {
 
 	- **Body:** Finally, it appends the actual payload (the raw bytes stored in the `_body` vector) to the end of the response vector and returns the completed package.
 
-	# `stringstream`
+	# --> `stringstream`
 
 	In C++, a `stringstream` is a stream class that allows you to read from and write to strings as if they were standard input/output streams (like `cin` or `cout`). It is highly useful for parsing text, formatting data, and safely converting between strings and numerical types.
 
