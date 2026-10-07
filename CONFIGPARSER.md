@@ -48,3 +48,9 @@ To satisfy the requirement to handle `interface:port` pairs, the parser must acc
 2. **Interface and Port:** `listen 127.0.0.1:8080;`
 
 3. **Interface only (Optional but good practice):** `listen 127.0.0.1;` (Should default the port to `80`)
+
+# `size_t` overflow
+
+In C++98, you can find the maximum value of a `size_t` by using `(size_t)-1` (or by including `<limits>`)
+
+# `value > maxSize / multiplier

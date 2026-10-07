@@ -23,7 +23,7 @@ ConfigParser::~ConfigParser() {}
 void ConfigParser::tokenize() {
 	std::ifstream configFile(_configFilePath.c_str());
 	if (!configFile.is_open()) {
-		throw std::runtime_error("Could not open config file");
+		throw std::runtime_error("Could not open config file: " + _configFilePath);
 	}
 
 	std::string line;
@@ -292,6 +292,14 @@ size_t ConfigParser::parseSize(const std::string& sizeStr) {
     if (!(iss >> value) || !iss.eof()) {
         throw std::runtime_error("Config Error: Invalid client_max_body_size value '" + sizeStr + "'");
     }
+
+	// maximum possible value for a size_t variable
+	size_t maxSize = (size_t)-1;
+
+	// check for overflow before multiplying
+	if (value > maxSize / multiplier) {
+		throw std::runtime_error("Config Error: client_max_body_size value is too large and causes overflow: '" + sizeStr + "'");
+	}
 
 	return value * multiplier;
 }
