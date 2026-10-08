@@ -22,7 +22,9 @@ ServerManager& ServerManager::operator=(const ServerManager& other) {
 ServerManager::~ServerManager() {}
 
 void ServerManager::acceptClient(int listenFd, std::vector<struct pollfd>& pendingFds) {
+	// extracts the first connection request and creates new fd for the client
 	int clientFd = accept(listenFd, NULL, NULL);
+	// if there are no pending connections, return to the polling loop
 	if (clientFd < 0) {
 		if (errno != EAGAIN && errno != EWOULDBLOCK) {
 			// log the actual error, but do NOT exit the program
@@ -123,7 +125,8 @@ void ServerManager::run() {
 	// begins the infinite event loop that keeps the server running continuously
 	while (true) {
 		// calls the poll() function to monitor all stored file descriptors
-		// blocking indefinitely (-1) until an I/O event occurs
+		// blocking indefinitely (-1) until an I/O event occurs (0 would return without waiting)
+		// -1 puts the process to sleep in the operating system until actual network activity happens
 		if (poll(&_pollFds[0], _pollFds.size(), -1) < 0) {
 			// handle error
 			continue; // skips the rest of the loop iteration if poll() encounters an error, preventing server crash

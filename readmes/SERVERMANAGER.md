@@ -38,6 +38,17 @@ Here is a breakdown of how it functions within your `ServerManager::acceptClient
 
 `EAGAIN` and `EWOULDBLOCK` are standard POSIX error codes that indicate an operation on a non-blocking file descriptor cannot be completed immediately.
 
+- **EAGAIN (Try again):** Historically, this means "Resource temporarily unavailable." It tells the application that the requested action cannot be performed right now, but it might succeed  if attempted again later.
+
+- **EWOULDBLOCK (Operation Would Block):** This specifically indicates that the requested operation (like reading, writing, or accepting a connection) would force the thread to pause (block) if the socket were operating in its default, blocking mode.
+
+**How they apply to your server:**  
+Because your project strictly requires all sockets to be non-blocking, system calls like `accept()` cannot wait around for a client to connect. If your `poll()` loop wakes up but by the time you call `accept()` the connection queue is empty, the operating system returns `-1` and sets `errno` to one of these values.
+
+They are not actual "errors" or failures; they are simply the operating system's way of saying, "There is nothing here to do right now, go back to your polling loop."
+
+*(NOTE: On most modern operating systems, including Linux and macOS,* `EAGAIN` *and* `EWOULDBLOCK` *are defined as the exact same integer value. However, it is standard practice to check fo rboth to ensure complete POSIX compliance across all platforms.)*
+
 ## `acceptClient()`
 
 This method handles new incoming connections, taking the server's listening socket (`listenFd`) and a reference to a temporary vector (`pendingFds`) used to store new connections safely during the current polling cycle.
@@ -45,4 +56,175 @@ This method handles new incoming connections, taking the server's listening sock
 - `int clientFd = accept(listenFd, NULL, NULL);`  
 Extracts the first connection request from the listening socket's queue and creates a new, dedicated file descriptor (`clientFd`) for the client. Passing `NULL` ignores the client's source IP and port details, which are not currently needed.
 
-- 
+- `if (clientFd < 0) return;`  
+Checks if `accept()` call failed. In non-blocking servers, this often means there were simply no pending connections (returning an `EAGAIN` or `EWOULDBLOCK` error), so the function safely exits without crashing.
+
+- `fcntl(clientFd, F_SETFL, O_NONBLOCK);`  
+Enforces the project's strict non-blocking requirement on the newly created client socket. This ensures future read/write operations on this specific client will not freeze the main server loop.
+
+- `struct pollfd pfd;`  
+`pfd.fd = clientFd;`  
+`pfd.events = POLLIN;`  
+`pfd.revents = 0;`  
+Initializes the new `pollfd` to the temporary vector. This prevents the main `_pollfds` vector from resizing or shifting while the `run()` loop is actively iterating over it, which could cause skipped events or segmentation faults.
+
+- `Client client(clientFd);`  
+Instantiates a new `Client` object, passing the new file descriptor to its constructor to manage state, buffers, and the eventual HTTP request/response cycle.
+
+- `std::map<int, ServerConfig*>::iterator it = _listenSockets.find(listenFd);...`  
+Looks up the original listening socket in the `_listenSockets` map to find the specific `ServerConfig` block the client connected to. It then assigns those base settings (like default error pages or max body size) directly to the client.
+
+- `client.setVirtualHosts(_servers);`  
+Passes the entire list of parsed server configurations to the client. This provides the necessary data for the client to eventually resolve `server_name` routing (virtual hosts) if multiple server blocks share the same listening port.
+
+- `_clients[clientFd] = client;`  
+Stores the fully initialized client object into the central `_clients` map, using its file descriptor as the key. This guarantees fast retrieval of the client's state the next time `poll()` detects activity on this socket.
+
+# --> Difference between `std::runtime_error` and `std::cerr`
+
+`std::runtime_error` and `std::cerr` serve completely different roles in C++: one is an **exception type** used for flow control when an error happens, while the other is an **output stream** used for printing messages.
+
+### Key Differences
+
+**Category**
+
+`std::runtime_error`: Exception class (inherits from `std::exception`)
+
+`std::cerr`: Standard error output stream (`std::ostream`)
+
+**Header**
+
+`std::runtime_error`: `<stdexcept>`
+
+`std::cerr`: `<iostream>`
+
+**Primary Role**
+
+`std::runtime_error`: Signal an unrecoverable or exceptional event
+
+`std::cerr`: Display log messages, errors, or warnings
+
+**Control Flow**
+
+`std::runtime_error`: Interrupts execution immediately and unwinds the stack until caught by a `catch` block; terminates the program if unhandled
+
+`std::cerr`: Does not change control flow; program execution continues to the next line immediately
+
+**Buffering**
+
+`std::runtime_error`: N/A (it is an object, not a stream)
+
+`std::cerr`: Unbuffered (writes immediately to console/file descriptor 2)
+
+## Detailed Breakdown
+
+1. `std::runtime_error`
+
+- **What it is:** A standard exception class representing errors detectable ony while the program is running (e.g., config parsing failure, invalid syntax, missing resources).
+
+- **How it works:** When thrown with `throw std::runtime_error("details")`, the C++ runtime stops regular execution, tears down local variables (stack unwinding), and jumps to the nearest matching `catch (const std::exception& e)` block.
+
+- **When to use it:** When an operation cannot continue or produce a valid result, such as parsing an invalid directive in `ConfigParser.cpp` during startup where halting configuration loading is mandatory.
+
+2. `std::cerr`
+
+- **What it is:** The predefined standard error stream, tied to file descriptor `2` (`stderr`).
+
+- **How it works:** It behaves similarly to `std::cout`, but it is typically unbuffered so output appears on the terminal immediately without waiting for a newline or an explicit flush.
+
+- **When to use it:** When you want to print a warning, debug message, or log a non-fatal failure without interrupting the server loop (for example, logging a failed `accept()` or file read while continuing to run other connections).
+
+## How They Work Together
+
+They are commonly used in tandem: you throw `std::runtime_error` at the failure site to bubble the problem up, and you catch it at a high level (e.g., in `main()`) to report the error via `std::cerr`:
+
+```
+int main(int argc, char** argv) {
+    try {
+        ConfigParser parser(argv[1]);
+        std::vector<ServerConfig> configs = parser.parse();
+        // start server...
+    } catch (const std::exception& e) {
+        std::cerr << "Fatal error: " << e.what() << std::endl;
+        return 1;
+    }
+    return 0;
+}
+```
+
+# `F_SETFL`
+
+`F_SETFL` is a command constant used with the POSIX `fcntl()` system call that stands for **File Set Status Flags**.
+
+## Core Role
+
+When passed to `fcntl()`, `F_SETFL` instructs the operating system kernel to update the file status flags of an open file descriptor (such as a socket pipe).
+
+In your `webserv` implementation, it is used specifically to switch sockets into non-blocking mode:
+
+`fcntl(clientFd, F_SETFL, O_NONBLOCK);`
+
+## Breakdown of the Call
+
+- `clientFd`: The file descriptor you want to configure.
+
+- `F_SETFL`: The operation/command telling `fcntl()`: *"Overwrite the file status flags for this descriptor with the value provided in the third argument."*
+
+- `O_NONBLOCK`: The target status flag, which disables blocking I/O behavior.
+
+## Why it matters in `webserv`
+
+By default, newly created sockets (from calls like `socket()` or `accept()`) operate in blocking mode, meaning system calls such as `read()`, `write()`, `send()`, or `recv()` will pause thread execution indefinitely until data arrives or buffer space clears.
+
+Applying `fcntl(clientFd, F_SETFL, O_NONBLOCK)` prevents thread blocking so that the single `poll()` event loop can handle thousands of client connections concurrently without stalling.
+
+# `struct pollfd`
+
+The `struct pollfd` is a standard POSIX data structure defined in `<poll.h>` that provides the kernel with the exact file descriptors and event types you want to monitor when calling `poll()`.
+
+## Structure Definition
+
+```
+struct pollfd {
+    int   fd;       // File descriptor to monitor
+    short events;   // Bitmask of events you are requesting to monitor
+    short revents;  // Bitmask of events returned by the kernel
+};
+```
+
+## Field Descriptions
+
+- `fd`: The open file descriptor assigned to the struct (for example, the main listening socket or an accepted client socket).
+
+- `events`: An input bitmask set by the application indicating what conditions should trigger a notification:
+	* `POLLIN`: Notifies when data is ready to be read without blocking.
+	* `POLLOUT`: Notifies when buffer space is available to write data without blocking.
+
+- `revents`: An output bitmask filled by the kernel when `poll()` returns. It reports which events actually occurred, including errors or hang-ups (e.g., `POLLIN`, `POLLOUT`, `POLLHUP`, `POLLERR`, `POLLNVAL`).
+
+## Step-by-Step Usage in `webserv`
+
+**1. Initialization:** When a new socket is opened or accepted, create an instance of `struct pollfd`, set `fd`, set `events = POLLIN`, and initialize `revents = 0`:
+
+```
+struct pollfd pfd;
+pfd.fd = clientFd;
+pfd.events = POLLIN;
+pfd.revents = 0;
+```
+
+**2. Registration:** Store these structs in a contiguous container, such as `std::vector<struct pollfd> _pollfds`.
+
+**3. Execution:** Pass the address of the underlying array to `poll()`:
+
+`poll(&_pollFds[0], _pollFds.size(), -1);`
+
+**4. Inspection:** Iterate through the array after `poll()` unblocks to check `revents` with bitwise operations:
+
+- `if (_pollFds[i].revents & POLLIN)`: Read incoming client requests or call `accept()` on listening sockets.
+
+- `if (_pollFds[i].revents & POLLOUT)`: Send the prepared HTTP response.
+
+- `if (_pollFds[i].revents & (POLLERR | POLLNVAL | POLLHUP))`: Close the descriptor and remove the struct from tracking.
+
+**5. State Synchronization:** Modify the `events` field depending on client progress. For instance, once an entire HTTP request is read and processed, switch the descriptor's mode from `_pollFds[i].events = POLLIN` to `_pollFds[i].events = POLLOUT` so the server waits for write availability without spinning the CPU.
