@@ -18,10 +18,10 @@
 
 class ServerManager {
 	private:
-		std::vector<ServerConfig>		_servers;
-		std::vector<struct pollfd>		_pollFds;
-		std::map<int, Client>			_clients;
-		std::map<int, ServerConfig*>	_listenSockets;
+		std::vector<ServerConfig>	_servers;
+		std::vector<struct pollfd>	_pollFds;
+		std::map<int, Client>		_clients;
+		std::map<int, size_t>		_listenSockets;
 
 		void acceptClient(int listenFd, std::vector<struct pollfd>& pendingFds);
 		void removeClient(int clientFd);
