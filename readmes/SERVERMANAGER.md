@@ -239,6 +239,18 @@ This line declares an empty collection named `boundAddresses` that is specifical
 
 *(Note on the syntax: The space between the two closing angle brackets`> >` is required in standard C++98 to prevent the compiler from misinterpreting it as the `>>` bitwise shift operator.)*
 
+### Why introduce `boundAddresses`
+
+Because you **cannot and should not** bind multiple times to the exact same IP and port combination.
+
+Here is why it works this way:
+
+- **The Transport Layer (TCP/Sockets):** A port is like a single physical door to a building. You only need one socket to open that door and listen for incoming traffic on that port (e.g., port 8080). If you try to call `bind()` a second time on the exact same port and IP, the operating system will reject it with an "Address already in use" error.
+
+- **The Application Layer (HTTP):** Once a client connects through that single door, they send an HTTP request. This request contains a `Host` header (e.g., `Host: webserv.com` or `Host: test.local`).
+
+Because you only have one socket listening on port 8080, all traffic for *both* virtual hosts comes through that single socket. Your server reads the `Host` header to figure out which website the client actually wants.
+
 # `count()`
 
 In C++, `count()` function searches a container for a specific element and returns the number of times that element appears.
