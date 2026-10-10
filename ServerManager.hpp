@@ -14,6 +14,7 @@
 #include <netdb.h>
 #include <cerrno>
 #include <iostream>
+#include <set>
 
 class ServerManager {
 	private:

@@ -228,3 +228,26 @@ pfd.revents = 0;
 - `if (_pollFds[i].revents & (POLLERR | POLLNVAL | POLLHUP))`: Close the descriptor and remove the struct from tracking.
 
 **5. State Synchronization:** Modify the `events` field depending on client progress. For instance, once an entire HTTP request is read and processed, switch the descriptor's mode from `_pollFds[i].events = POLLIN` to `_pollFds[i].events = POLLOUT` so the server waits for write availability without spinning the CPU.
+
+# `boundAddresses`
+
+`std::set<std::pair<std::string, int> > boundAddresses;`
+
+This line declares an empty collection named `boundAddresses` that is specifically designed to store unique pairs of strings and integers (representing the `host` and `port`).
+
+`std::set` **does not allow duplicate elements**. When you attempt to insert a `host` and `port` combination that is already inside the set, the `std::set` simply ignores the new insertion. 
+
+*(Note on the syntax: The space between the two closing angle brackets`> >` is required in standard C++98 to prevent the compiler from misinterpreting it as the `>>` bitwise shift operator.)*
+
+# `count()`
+
+In C++, `count()` function searches a container for a specific element and returns the number of times that element appears.
+
+Because an `std::set` strictly enforces uniqueness, `count()` will only ever return one of two values when used on a set:
+
+- `1`: The element exists in the set.
+
+- `0`: The element does not exist in the set.
+
+In the context of the virtual host check  
+(`boundAddresses.count(std::make_pair(host, port)) > 0`), it acts as a simple boolean check. It tells the program: *"If this exact host and port combination appears 1 time in our tracked list, we know we've already set up a socket for it, so we can skip binding a new one*.

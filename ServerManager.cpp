@@ -45,9 +45,9 @@ void ServerManager::acceptClient(int listenFd, std::vector<struct pollfd>& pendi
 
 	Client client(clientFd);
 
-	std::map<int, ServerConfig*>::iterator it = _listenSockets.find(listenFd);
-	if (it != _listenSockets.end() && it->second != NULL) {
-		client.setServer(*(it->second));
+	std::map<int, size_t>::iterator it = _listenSockets.find(listenFd);
+	if (it != _listenSockets.end()) {
+		client.setServer(_servers[it->second]);
 	}
 
 	client.setVirtualHosts(_servers);
@@ -67,17 +67,30 @@ void ServerManager::removeClient(int clientFd) {
 }
 
 void ServerManager::initServers() {
+	std::set<std::pair<std::string, int> > boundAddresses;
+	
 	for (size_t i = 0; i < _servers.size(); ++i) {
+		std::string host = _servers[i].getHost();
+		int port = _servers[i].getPort();
+
+		// check if this host:port combination is already bound
+		if (boundAddresses.count(std::make_pair(host, port)) > 0) {
+			std::cout << "Virtual host detected for " << host << ":" << port
+					  << " - skipping socket creation.\n";
+			continue;
+		}
+
 		struct addrinfo hints, *serverInfo;
 		std::memset(&hints, 0, sizeof(hints));
 		hints.ai_family = AF_INET; // IPv4
 		hints.ai_socktype = SOCK_STREAM; // TCP
+		hints.ai_flags = AI_PASSIVE; // instructs getaddrinfo to return a bindable address if host is null
 
-		std::string host = _servers[i].getHost();
-		std::string port = _servers[i].getPortString();
+		std::string portStr = _servers[i].getPortString();
 
-		if (getaddrinfo(host.c_str(), port.c_str(), &hints, &serverInfo) != 0) {
-			continue; // or handle error using gai_strerror()
+		if (getaddrinfo(host.c_str(), portStr.c_str(), &hints, &serverInfo) != 0) {
+			std::cerr << "Error: getaddrinfo failed\n";
+			continue;
 		}
 
 		int listenFd = socket(serverInfo->ai_family, serverInfo->ai_socktype, serverInfo->ai_protocol);
@@ -90,10 +103,22 @@ void ServerManager::initServers() {
 		int opt = 1;
         setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
-		// enforce non-blocking mode
-		fcntl(listenFd, F_SETFL, O_NONBLOCK);
+		// retrieve the current flags
+		int flags = fcntl(listenFd, F_GETFL, 0);
+		if (flags == -1) {
+			std::cerr << "Error: fcntl(F_GETFL) failed for host " << host << ":" << port << std::endl;;
+			close(listenFd);
+			continue; // skip this server block and move to the next one
+		}
+
+		flags |= O_NONBLOCK; // append the non-blocking flag
+
+		if (fcntl(listenFd, F_SETFL, flags) == -1) {
+			std::cerr << "Failed to set non-blocking flag" << std::endl;
+		}
 
 		if (bind(listenFd, serverInfo->ai_addr, serverInfo->ai_addrlen) < 0) {
+			std::cerr << "Error: bind failed for " << host << ":" << portStr << "\n";
 			close(listenFd);
 			freeaddrinfo(serverInfo);
 			continue;
@@ -102,12 +127,16 @@ void ServerManager::initServers() {
 		freeaddrinfo(serverInfo);
 
 		if (listen(listenFd, 128) < 0) {
+			std::cerr << "Error: listen failed\n";
 			close(listenFd);
 			continue;
 		}
 
+		// add the successfully bound host and port to our tracking set
+		boundAddresses.insert(std::make_pair(host, port));
+
 		// Map the new socket to its configuration so acceptClient() can pass it to the Client
-		_listenSockets[listenFd] = &_servers[i];
+		_listenSockets[listenFd] = i;
 
 		// Register the listening socket in the dynamic poll vector
 		struct pollfd pfd;
@@ -150,7 +179,7 @@ void ServerManager::run() {
 			}
 
 			// checks whether the active file descriptor belongs to a main listening server socket
-			std::map<int, ServerConfig*>::iterator serverIter = _listenSockets.find(currentFd);
+			std::map<int, size_t>::iterator serverIter = _listenSockets.find(currentFd);
 			// confirms that the descriptor is a valid initialized listening socket
 			if (serverIter != _listenSockets.end() && serverIter->second != NULL) {
 				// if a new connection request is waiting (POLLIN), it accepts the client 
