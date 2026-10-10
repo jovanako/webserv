@@ -115,6 +115,8 @@ void ServerManager::initServers() {
 
 		if (fcntl(listenFd, F_SETFL, flags) == -1) {
 			std::cerr << "Failed to set non-blocking flag" << std::endl;
+			close(listenFd);
+			continue;
 		}
 
 		if (bind(listenFd, serverInfo->ai_addr, serverInfo->ai_addrlen) < 0) {
@@ -181,7 +183,7 @@ void ServerManager::run() {
 			// checks whether the active file descriptor belongs to a main listening server socket
 			std::map<int, size_t>::iterator serverIter = _listenSockets.find(currentFd);
 			// confirms that the descriptor is a valid initialized listening socket
-			if (serverIter != _listenSockets.end() && serverIter->second != NULL) {
+			if (serverIter != _listenSockets.end()) {
 				// if a new connection request is waiting (POLLIN), it accepts the client 
 				// and pushes its descriptor into the temporary pendingFds vector
 				if (_pollFds[i].revents & POLLIN) {
