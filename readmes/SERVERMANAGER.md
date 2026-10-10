@@ -152,7 +152,7 @@ int main(int argc, char** argv) {
 }
 ```
 
-# `F_SETFL`
+# --> `F_SETFL`
 
 `F_SETFL` is a command constant used with the POSIX `fcntl()` system call that stands for **File Set Status Flags**.
 
@@ -178,7 +178,7 @@ By default, newly created sockets (from calls like `socket()` or `accept()`) ope
 
 Applying `fcntl(clientFd, F_SETFL, O_NONBLOCK)` prevents thread blocking so that the single `poll()` event loop can handle thousands of client connections concurrently without stalling.
 
-# `struct pollfd`
+# --> `struct pollfd`
 
 The `struct pollfd` is a standard POSIX data structure defined in `<poll.h>` that provides the kernel with the exact file descriptors and event types you want to monitor when calling `poll()`.
 
@@ -229,7 +229,7 @@ pfd.revents = 0;
 
 **5. State Synchronization:** Modify the `events` field depending on client progress. For instance, once an entire HTTP request is read and processed, switch the descriptor's mode from `_pollFds[i].events = POLLIN` to `_pollFds[i].events = POLLOUT` so the server waits for write availability without spinning the CPU.
 
-# `boundAddresses`
+# --> `boundAddresses`
 
 `std::set<std::pair<std::string, int> > boundAddresses;`
 
@@ -251,7 +251,7 @@ Here is why it works this way:
 
 Because you only have one socket listening on port 8080, all traffic for *both* virtual hosts comes through that single socket. Your server reads the `Host` header to figure out which website the client actually wants.
 
-# `count()`
+# --> `count()`
 
 In C++, `count()` function searches a container for a specific element and returns the number of times that element appears.
 
@@ -263,3 +263,26 @@ Because an `std::set` strictly enforces uniqueness, `count()` will only ever ret
 
 In the context of the virtual host check  
 (`boundAddresses.count(std::make_pair(host, port)) > 0`), it acts as a simple boolean check. It tells the program: *"If this exact host and port combination appears 1 time in our tracked list, we know we've already set up a socket for it, so we can skip binding a new one*.
+
+# --> `struct addrinfo`
+
+`struct addrinfo` is a standard POSIX data structure used to prepare network socket addresses. It acts as a bridge between human-readable network definitions (like an IP address and port string) and the raw binary formats the operating system requires to open network connections.
+
+When you configure an empty `addrinfo` struct (the "hints") and pass it into the `getaddrinfo()` function, it dictates the criteria for address resolution. The function then dynamically allocates and returns a fully populated `addrinfo` structure containing everything needed to create and bind a socket.
+
+- `ai_family`: Specifies the address family. You set this to `AF_INET` to explicitly request IPv4 routing.
+
+- `ai_socktype`: Defines the type of socket communication. You set this to `SOCK_STREAM` to specify TCP, ensuring reliable, two-way byte streams.
+
+- `ai_flags`: Modifies the behavior of `getaddrinfo()`. Applying `AI_PASSIVE` tells the OS that the resulting address will be used to bind a server socket and listen for incoming connections, routing to the wildcard IP if the host string is null.
+
+- `ai_protocol`: Identifies the specific protocol to use. The OS populates this during resolution, and you pass it directly into the `socket()` system call.
+
+- `ai_addr`: A pointer to the underlying `sockaddr` binary structure containing the actual IP address and port data. You pass this directly to the `bind()` function to attach your socket to the network interface.
+
+- `ai_addrlen`: The exact size in bytes of the `ai_addr` structure. The `bind()` function requires this to read the memory safely without overstepping.
+
+- `ai_next`: A pointer to the next `addrinfo` structure in memory. Because a single host name might resolve to multiple network addresses, `getaddrinfo()` returns a linked list.
+
+Because `getaddrinfo()` dynamically allcates the memory for the returned `addrinfo` linked list, you must explicitly delete it using `freeaddrinfo()`.
+

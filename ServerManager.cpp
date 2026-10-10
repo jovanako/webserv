@@ -74,6 +74,7 @@ void ServerManager::initServers() {
 		int port = _servers[i].getPort();
 
 		// check if this host:port combination is already bound
+		// if yes, skip and rely on the HTTP Host header to route traffic later
 		if (boundAddresses.count(std::make_pair(host, port)) > 0) {
 			std::cout << "Virtual host detected for " << host << ":" << port
 					  << " - skipping socket creation.\n";
@@ -86,7 +87,7 @@ void ServerManager::initServers() {
 		hints.ai_socktype = SOCK_STREAM; // TCP
 		hints.ai_flags = AI_PASSIVE; // instructs getaddrinfo to return a bindable address if host is null
 
-		std::string portStr = _servers[i].getPortString();
+		std::string portStr = _servers[i].getPortString(); // getaddrinfo() needs port as a string
 
 		if (getaddrinfo(host.c_str(), portStr.c_str(), &hints, &serverInfo) != 0) {
 			std::cerr << "Error: getaddrinfo failed\n";
@@ -128,6 +129,7 @@ void ServerManager::initServers() {
 
 		freeaddrinfo(serverInfo);
 
+		// mark the socket active and queue up to 128 pending connection requests at a time
 		if (listen(listenFd, 128) < 0) {
 			std::cerr << "Error: listen failed\n";
 			close(listenFd);
