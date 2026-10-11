@@ -83,7 +83,7 @@ void ServerManager::initServers() {
 
 		struct addrinfo hints, *serverInfo;
 		std::memset(&hints, 0, sizeof(hints));
-		hints.ai_family = AF_INET; // IPv4
+		hints.ai_family = AF_INET; // IPv4 (ai stands for address info)
 		hints.ai_socktype = SOCK_STREAM; // TCP
 		hints.ai_flags = AI_PASSIVE; // instructs getaddrinfo to return a bindable address if host is null
 
@@ -120,6 +120,7 @@ void ServerManager::initServers() {
 			continue;
 		}
 
+		// assigns a specific network address (IP address and port) to listenFd
 		if (bind(listenFd, serverInfo->ai_addr, serverInfo->ai_addrlen) < 0) {
 			std::cerr << "Error: bind failed for " << host << ":" << portStr << "\n";
 			close(listenFd);
