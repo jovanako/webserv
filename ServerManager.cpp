@@ -60,7 +60,7 @@ void ServerManager::removeClient(int clientFd) {
 	_clients.erase(clientFd);
 	for (std::vector<struct pollfd>::iterator it = _pollFds.begin(); it != _pollFds.end(); ++it) {
 		if (it->fd == clientFd) {
-			_pollFds.erase(it); // check if ok
+			_pollFds.erase(it);
 			break;
 		}
 	}
@@ -158,11 +158,16 @@ void ServerManager::run() {
 
 	// begins the infinite event loop that keeps the server running continuously
 	while (true) {
-		// calls the poll() function to monitor all stored file descriptors
-		// blocking indefinitely (-1) until an I/O event occurs (0 would return without waiting)
-		// -1 puts the process to sleep in the operating system until actual network activity happens
+		/* calls the poll() function to monitor all stored file descriptors blocking
+		indefinitely (-1) until an I/O event occurs; -1 puts the process to sleep in 
+		the operating system until actual network activity happens */
 		if (poll(&_pollFds[0], _pollFds.size(), -1) < 0) {
-			// handle error
+			// if poll was interrupted by a system signal (e.g., CGI child process ending)
+			if (errno == EINTR) {
+				continue;
+			}
+			// for all other errors, log it but do NOT crash the server
+			std::cerr << "Error: poll() failed: " << strerror(errno) << std::endl;
 			continue; // skips the rest of the loop iteration if poll() encounters an error, preventing server crash
 		}
 		for (size_t i = 0; i < _pollFds.size(); ) {
@@ -175,33 +180,29 @@ void ServerManager::run() {
 			}
 
 			int currentFd = _pollFds[i].fd;
-
-			// catches severe socket errors or invalid descriptors
-			// and immediately terminates the client connection, skipping further processing without incrementing i
-			if (_pollFds[i].revents & (POLLERR | POLLNVAL)) {
-				removeClient(currentFd);
-				continue;
-			}
-
 			// checks whether the active file descriptor belongs to a main listening server socket
 			std::map<int, size_t>::iterator serverIter = _listenSockets.find(currentFd);
-			// confirms that the descriptor is a valid initialized listening socket
-			if (serverIter != _listenSockets.end()) {
-				// if a new connection request is waiting (POLLIN), it accepts the client 
-				// and pushes its descriptor into the temporary pendingFds vector
-				if (_pollFds[i].revents & POLLIN) {
-					acceptClient(currentFd, pendingFds);
+
+			if (_pollFds[i].revents & (POLLERR | POLLNVAL)) {
+				if (serverIter != _listenSockets.end()) {
+					// it's a listening socket error (critical failure)
+					std::cerr << "Critical error on listening socket fd: " << currentFd << std::endl;
+					close(currentFd);
+					_listenSockets.erase(serverIter);
+					_pollFds.erase(_pollFds.begin() + i);
+				} else {
+					// it is definitely a client socket, safe to remove
+					removeClient(currentFd);
 				}
-				i++;
-				continue;
+				continue; // don't increment i, elements shifted
 			}
 
 			// handle existing client traffic
-			std::map<int, Client>::iterator clientIter = _clients.find(_pollFds[i].fd);
+			std::map<int, Client>::iterator clientIter = _clients.find(currentFd);
 			if (clientIter != _clients.end()) {
 				Client& client = clientIter->second;
 
-				// handle POLLHUP only if there's nodata left to read
+				// handle POLLHUP only if there's no data left to read
 				if ((_pollFds[i].revents & POLLHUP) && !(_pollFds[i].revents & POLLIN)) {
 					removeClient(currentFd);
 					continue;

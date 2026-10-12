@@ -379,3 +379,31 @@ Specifically, it tells the operating system to maintain a backlog queue of pendi
 # `ServerManager::run()`
 
 This function acts as the main event loop keeping the web server alive and responsive.
+
+- `std::vector<struct pollfd> pendingFds;`  
+Initializes a temporary conatiner to hold any new client connections that are accepted during the current cycle, preventing the active poll list from being modified while it is still being iterated over.
+
+- `while (true) {`  
+Starts the infinite loop that keeps the server running continuously, waiting for and processing network events.
+
+- `if (poll(&_pollFds[0], _pollFds.size(), -1) < 0) {`  
+Calls the system `poll()` function to monitor all stored file descriptors (sockets) for activity. The `-1` tells the server to sleep and block indefinitely until an event actually happens. If it returns less than 0, an error occurred.
+
+- `continue; }`  
+If `poll()` encounters an error, this skips the rest of the loop and starts over to prevent the server from crashing.
+
+- `for (size_t i = 0; i < _pollFds.size(); ) {`  
+Begins looping through every file descriptor currently being monitored by `poll()`. Notice `i` is not incremented here in the loop declaration - it is handled manually inside the loop.
+
+- `if (_pollFds[i].revents == 0) { i++; continue; }`  
+Checks if any events (`revents`) occurred for this specific socket. If nothing happened (0), it increments `i` and skips to the next socket.
+
+- `int currentFd = pollFds[i].fd;`  
+Saves the active file descriptor to a local variable for easier access.
+
+- `if (_pollFds[i].revents & (POLLERR | POLLNVAL)) {`  
+`removeClient(currentFd); continue; }`  
+Checks for severe socket errors (`POLLERR`) or invalid descriptors (`POLLNVAL`). If found, it drops the connection via `removeClient()` and skips further processing. Because `removeClient()` shifts the vector elements, `i` is intentionally not incremented.
+
+- `std::map<int, size_t>::iterator serverIter = _listenSockets.find(currentFd);`  
+Checks if the current active socket is one of the main server listening sockets (waiting for new connections) rather than an existing client socket.
