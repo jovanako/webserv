@@ -170,6 +170,7 @@ void ServerManager::run() {
 			std::cerr << "Error: poll() failed: " << strerror(errno) << std::endl;
 			continue; // skips the rest of the loop iteration if poll() encounters an error, preventing server crash
 		}
+
 		for (size_t i = 0; i < _pollFds.size(); ) {
 			
 			// checks if any events were returned (revents) for the current socket
@@ -195,6 +196,15 @@ void ServerManager::run() {
 					removeClient(currentFd);
 				}
 				continue; // don't increment i, elements shifted
+			}
+
+			// if the event is on a listening socket, accept the new client
+			if (serverIter != _listenSockets.end()) {
+				if (_pollFds[i].revents & POLLIN) {
+					acceptClient(currentFd, pendingFds);
+				}
+				i++;
+				continue; // skip the rest, as listening sockets don't process HTTP data
 			}
 
 			// handle existing client traffic

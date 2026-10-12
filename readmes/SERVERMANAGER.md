@@ -400,10 +400,3 @@ Checks if any events (`revents`) occurred for this specific socket. If nothing h
 
 - `int currentFd = pollFds[i].fd;`  
 Saves the active file descriptor to a local variable for easier access.
-
-- `if (_pollFds[i].revents & (POLLERR | POLLNVAL)) {`  
-`removeClient(currentFd); continue; }`  
-Checks for severe socket errors (`POLLERR`) or invalid descriptors (`POLLNVAL`). If found, it drops the connection via `removeClient()` and skips further processing. Because `removeClient()` shifts the vector elements, `i` is intentionally not incremented.
-
-- `std::map<int, size_t>::iterator serverIter = _listenSockets.find(currentFd);`  
-Checks if the current active socket is one of the main server listening sockets (waiting for new connections) rather than an existing client socket.
