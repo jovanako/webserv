@@ -17,6 +17,7 @@ class CgiRequest {
 		int							_bodyFileDescriptor;
 
 		CgiRequest();
+		void addHeader(const HttpRequest& request, const std::string& headerKey, const std::string& envVarName);
 	
 	public:
 		CgiRequest(const LocationConfig& location, const HttpRequest& request);
