@@ -7,6 +7,7 @@
 #include <sstream>
 #include <cctype>
 #include <unistd.h>
+#include "LocationConfig.hpp"
 
 class HttpRequest {
 	public:
@@ -58,6 +59,8 @@ class HttpRequest {
 
 		void addHeader(const std::string& key, const std::string& value);
 		void appendBody(const char* data, size_t size);
+
+		std::string	makeFullPath(const LocationConfig& matchedLocation) const;
 	};
 
 #endif

@@ -400,3 +400,20 @@ void HttpRequest::appendBody(const char* data, size_t size) {
         // _contentLength can either track total accumulated bytes or the header's Content-Length
     }
 }
+
+std::string HttpRequest::makeFullPath(const LocationConfig& matchedLocation) const {
+	std::string path = matchedLocation.getPath();
+	std::string strippedUri = _uri.substr(path.length());
+
+	std::string fullPath = matchedLocation.getRoot();
+
+	if (!fullPath.empty() && fullPath[fullPath.length() - 1] == '/') {
+		fullPath.erase(fullPath.length() - 1);
+	}
+	if (strippedUri.empty() || strippedUri[0] != '/') {
+		fullPath += "/";
+	}
+	fullPath += strippedUri;
+
+	return fullPath;
+}

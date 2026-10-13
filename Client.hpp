@@ -10,6 +10,8 @@
 #include <sys/stat.h>
 #include <fstream>
 #include <dirent.h>
+#include <iostream>
+#include <cerrno>
 
 class Client {
 	public:
@@ -42,7 +44,6 @@ class Client {
 		bool		shouldKeepAlive() const;
 		void		finalizeResponse();
 		void		resetForNextRequest();
-		std::string	makeFullPath(const LocationConfig& matchedLocation, const std::string uri);
 
 		int			handleGet(const LocationConfig& matchedLocation, std::string fullPath, const std::string uri);
 		int			handlePost(const LocationConfig& matchedLocation, const std::string uri);
@@ -61,6 +62,7 @@ class Client {
 		void handleDone();
 		
 		void parseHeaders();
+		void parseChunkedBody();
 		void buildErrorResponse(int statusCode);
 		
 		ConnectionState						getClientState() const;

@@ -70,12 +70,22 @@ void Client::handleReadHeader() {
 		char buf[BUFFER_SIZE];
 		ssize_t bytesRead = recv(_socketFd, buf, sizeof(buf), 0);
 
-		if (bytesRead <= 0) {
-			// 0 means client closed connection; < 0 means read error
-			// handle error
-			_clientState = DONE;
+		if (bytesRead < 0) {
+			// if there's simply no data right now, don't close the connection
+		// just return and let poll() wait for the next event
+		if (errno == EAGAIN || errno == EWOULDBLOCK) {
 			return;
 		}
+
+		// for actual network errors (e.g., ECONNRESET), mark as done to trigger cleanup
+		std::cerr << "Read error on fd " << _socketFd << " (errno: " << errno << ")\n";
+		_clientState = DONE;
+		return;
+	} else if (bytesRead == 0) {
+		std::cout << "Client disconnected on fd " << _socketFd << "\n";
+		_clientState = DONE;
+		return;
+	}
 
 		_readBuffer.append(buf, bytesRead);
 		headerEnd = _readBuffer.find("\r\n\r\n");
@@ -160,35 +170,91 @@ void Client::handleReadHeader() {
 	}
 }
 
-void Client::handleReadBody() {
-	char buf[BUFFER_SIZE];
-	size_t contentLen = _request.getContentLength();
+void Client::parseChunkedBody() {
+	while (true) {
+		// find the end of the chunk size line
+		size_t pos = _readBuffer.find("\r\n");
+		if (pos == std::string::npos) {
+			return; // wait for more data to arrive
+		}
 
-	if (_readBuffer.length() < contentLen) {
-		ssize_t bytesRead = recv(_socketFd, buf, sizeof(buf), 0);
-		
-		if (bytesRead <= 0) {
-			// 0 means client closed connection; < 0 means read error
-			// handle error
-			_clientState = DONE;
+		// extract chunk size (and ignore potential chunk extensions starting with ';')
+		std::string hexSize = _readBuffer.substr(0, pos);
+		size_t semiPos = hexSize.find(';');
+		if (semiPos != std::string::npos) {
+			hexSize = hexSize.substr(0, semiPos);
+		}
+
+		//convert hex string to integer
+		std::stringstream ss;
+		ss << std::hex << hexSize;
+		size_t chunkSize;
+		if (!(ss >> chunkSize)) {
+			buildErrorResponse(400); // bad request
 			return;
 		}
-		_readBuffer.append(buf, bytesRead);
+
+		// a chunk size of 0 indicates the end of the request body
+		if (chunkSize == 0) {
+			// check if the final "\r\n\r\n" is completely in the buffer
+			if (_readBuffer.length() >= pos + 4 && _readBuffer.substr(pos, 4) == "\r\n\r\n") {
+				_readBuffer.erase(0, pos + 4);
+				_clientState = PROCESSING;
+			}
+			return; // wait for final "\r\n" if not fully received yet
+		}
+
+		// check if the entire chunk data + trailing "\r\n" has been received
+		if (_readBuffer.length() < pos + 2 + chunkSize + 2) {
+			return; // wait for the rest of the chunk
+		}
+
+		// append the chunk data to the request
+		_request.appendBody(_readBuffer.data() + pos + 2, chunkSize);
+
+		// erase the processed chunk size, chunk data, and both \r\n from the buffer
+		_readBuffer.erase(0, pos + 2 + chunkSize + 2);
+	}
+}
+
+void Client::handleReadBody() {
+	char buf[BUFFER_SIZE];
+	ssize_t bytesRead = recv(_socketFd, buf, sizeof(buf), 0);
+		
+	if (bytesRead < 0) {
+		// if there's simply no data right now, don't close the connection
+		// just return and let poll() wait for the next event
+		if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			return;
+		}
+
+		// for actual network errors (e.g., ECONNRESET), mark as done to trigger cleanup
+		std::cerr << "Read error on fd " << _socketFd << " (errno: " << errno << ")\n";
+		_clientState = DONE;
+		return;
+	} else if (bytesRead == 0) {
+		std::cout << "Client disconnected on fd " << _socketFd << "\n";
+		_clientState = DONE;
+		return;
 	}
 
-	if (_readBuffer.length() > _server.getClientMaxBodySize()) {
-        _response.setStatusCode(413); // Payload Too Large
-        finalizeResponse();
-        return;
-    }
+	_readBuffer.append(buf, bytesRead);
 
-	if (_readBuffer.length() >= contentLen) {
-		_request.appendBody(_readBuffer.data(), contentLen);
+	if (_request.isChunked()) {
+		parseChunkedBody();
+	} else {
+		size_t contentLen = _request.getContentLength();
 
-		// Erase the body - leftovers are from next http request
-		_readBuffer.erase(0, contentLen);
+		if (_readBuffer.length() > _server.getClientMaxBodySize()) {
+			buildErrorResponse(413); // pazload too large
+			return;
+		}
 
-		_clientState = PROCESSING;
+		if (_readBuffer.length() >= contentLen) {
+			_request.appendBody(_readBuffer.data(), contentLen);
+			_readBuffer.erase(0, contentLen);
+			_clientState = PROCESSING;
+		}
 	}
 }
 
@@ -322,23 +388,6 @@ static std::string getMimeType(const std::string& path) {
 	// fallback for anything else
 	return "application/octet-stream";
 
-}
-
-std::string Client::makeFullPath(const LocationConfig& matchedLocation, const std::string uri) {
-	std::string path = matchedLocation.getPath();
-	std::string strippedUri = uri.substr(path.length());
-
-	std::string fullPath = matchedLocation.getRoot();
-
-	if (!fullPath.empty() && fullPath[fullPath.length() - 1] == '/') {
-		fullPath.erase(fullPath.length() - 1);
-	}
-	if (strippedUri.empty() || strippedUri[0] != '/') {
-		fullPath += "/";
-	}
-	fullPath += strippedUri;
-
-	return fullPath;
 }
 
 int Client::handleGet(const LocationConfig& matchedLocation, std::string fullPath, const std::string uri) {
@@ -545,7 +594,10 @@ void Client::handleProcessing() {
 
 	const std::map<std::string, std::string> cgiHandlers = matchedLocation->getCgiHandlers();
 	for (std::map<std::string, std::string>::const_iterator iter = cgiHandlers.begin(); iter != cgiHandlers.end(); ++iter) {
-		if (uri.find(iter->first) != std::string::npos) {
+		const std::string& ext = iter->first;
+
+		if (uri.length() >= ext.length()
+			&& uri.compare(uri.length() - ext.length(), ext.length(), ext) == 0) {
 			cgiFlag = true;
 			// exeAssigns new contents to the vector, replacing its current contents, and modifying its size accordingly.
 			char* const argv[] = {NULL};
@@ -555,10 +607,8 @@ void Client::handleProcessing() {
 		}
 	}
 
-	std::string fullPath = makeFullPath(*matchedLocation, uri);
+	std::string fullPath = _request.makeFullPath(*matchedLocation);
 
-	
-	
 	if (!cgiFlag) {
 		if (method == "GET") {
 			if (!handleGet(*matchedLocation, fullPath, uri)) {
