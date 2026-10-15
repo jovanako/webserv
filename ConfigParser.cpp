@@ -95,7 +95,7 @@ void ConfigParser::parseServerBlock() {
 			}
 
 			// convert and validate port range (1 - 65535)
-			int port = std::atoi(portStr.c_str());
+			int port = std::atoi(portStr.c_str()); // fix with strtol()
 			if (port < 1 || port > 65535) {
 				throw std::runtime_error("Config Error: Port out of range '" + portStr + "'");
 			}

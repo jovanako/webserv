@@ -227,7 +227,6 @@ void Client::handleReadBody() {
 		if (errno == EAGAIN || errno == EWOULDBLOCK) {
 			return;
 		}
-
 		// for actual network errors (e.g., ECONNRESET), mark as done to trigger cleanup
 		std::cerr << "Read error on fd " << _socketFd << " (errno: " << errno << ")\n";
 		_clientState = DONE;
