@@ -33,6 +33,12 @@ class HttpRequest {
 		int									_errorCode;
 		bool								_isChunked;
 
+		int validateUriStructure(const std::string& uri) const;
+		bool hasValidUriCharacters(const std::string& uri) const;
+		void storeUriParts(const std::string& uri);
+		int validateTransferEncoding(const std::string& value);
+		int validateContentLength(const std::string& value);
+
 	public:
 		HttpRequest();
 		HttpRequest(const HttpRequest& other);

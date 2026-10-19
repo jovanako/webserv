@@ -144,3 +144,157 @@ The arrows point *towards* your variables. Data flows out of the stream (like `s
 - **Use `<<` (Insertion/Output) to write data.**\
 The arrows point *towards* the stream. Data flows out of your variables or raw text and into the stream (like `std::cout` or `ostringstream`).\
 *Example:* `oss << "Error: " << errorCode;` (Data moves from the text and the variable into `oss`).
+
+# Current `HttpRequest` Function Map
+
+This section describes the current implementation and the responsibility of each `HttpRequest` function.
+
+## Object lifecycle
+
+### `HttpRequest()`
+
+Creates an empty request. It starts in `PARSE_REQUEST_LINE`, with zero content length, no error code, and chunked transfer disabled.
+
+### Copy constructor and assignment operator
+
+Copy all request state, including the method, URI, query string, version, headers, body, content length, error code, and chunked flag.
+
+### Destructor
+
+Releases the request object. The class uses standard containers, so they clean up their own storage.
+
+## State and value setters
+
+### `setRequestState(ParsingState)`
+
+Changes the parser state. The states describe whether the request line, headers, or body are being parsed, or whether parsing is complete or failed.
+
+### `setErrorCode(int)`
+
+Stores the HTTP error code associated with a parsing failure.
+
+### `setMethod(const std::string&)`
+
+Validates and stores the request method. Every character must be uppercase, and only `GET`, `POST`, and `DELETE` are supported. Invalid characters produce `400`; unsupported methods produce `501` and set `PARSE_ERROR`.
+
+### `setUri(const std::string&)`
+
+Coordinates URI validation and storage:
+
+1. `validateUriStructure()` checks the leading slash, maximum length, and traversal patterns.
+2. `hasValidUriCharacters()` checks printable characters and percent-encoding.
+3. `storeUriParts()` separates and decodes the path and query string.
+
+### `setVersion(const std::string&)`
+
+Accepts only `HTTP/1.0` and `HTTP/1.1`. Other versions set error `505` and move the request to `PARSE_ERROR`.
+
+### `setContentLength(size_t)`
+
+Stores the parsed `Content-Length` value.
+
+## Request accessors
+
+The getter functions expose parsed request data without changing it:
+
+- `getRequestState()` returns the parser state.
+- `getErrorCode()` returns the current parsing error.
+- `isChunked()` reports whether `Transfer-Encoding: chunked` was received.
+- `getMethod()` returns the method.
+- `getUri()` returns the decoded path.
+- `getQueryString()` returns the decoded query string.
+- `getVersion()` returns the HTTP version.
+- `getHeaders()` returns the normalized header map.
+- `getBody()` returns the raw request body.
+- `getContentLength()` returns the parsed body length.
+
+## URI helpers
+
+### `validateUriStructure(const std::string&)`
+
+Returns `0` for a structurally valid URI. It returns `400` when the URI is empty or does not begin with `/`, `414` when it exceeds `MAX_URI_LENGTH`, and `403` when it contains blocked parent-directory traversal patterns.
+
+### `hasValidUriCharacters(const std::string&)`
+
+Rejects control characters, DEL, and invalid percent sequences. A percent sign must be followed by two hexadecimal digits.
+
+### `storeUriParts(const std::string&)`
+
+Splits the URI at `?`, decodes the path and query using percent-decoding, then stores them in `_uri` and `_queryString`.
+
+## Header handling
+
+### `addHeader(const std::string&, const std::string&)`
+
+Validates, normalizes, and stores one header:
+
+1. Validates the header-name characters.
+2. Converts the name to lowercase.
+3. Rejects duplicate `Host`, `Content-Length`, and `Transfer-Encoding` headers.
+4. Validates the `Host` value.
+5. Validates transfer encoding or content length when applicable.
+6. Stores the normalized key and original value.
+
+### `handleError(HttpRequest&, int)`
+
+Stores an error code and changes the parser state to `PARSE_ERROR`.
+
+### `isValidHeaderKey(const std::string&)`
+
+Checks that a header name is non-empty, printable ASCII, and contains no HTTP separator characters.
+
+### `toLowerCopy(const std::string&)`
+
+Returns a lowercase copy of a header name or value.
+
+### `isDuplicateRestrictedHeader(const std::string&, headers)`
+
+Checks whether `Host`, `Content-Length`, or `Transfer-Encoding` already exists in the header map.
+
+### `validateTransferEncoding(const std::string&)`
+
+Rejects `Transfer-Encoding` when `Content-Length` already exists, accepts only `chunked`, and sets `_isChunked` when valid. It returns `400`, `501`, or `0`.
+
+### `validateContentLength(const std::string&)`
+
+Rejects conflicts with `Transfer-Encoding`, requires a decimal value, parses the length, and stores it. It returns `400` or `0`.
+
+## Host validation helpers
+
+### `isValidHost(const std::string&)`
+
+Validates a complete HTTP `Host` header value by separating its optional port and checking the hostname.
+
+### `splitHostAndPort(const std::string&, std::string&)`
+
+Splits a hostname from an optional `:port`. A missing port is allowed; a present port must pass `isValidPort()`.
+
+### `isValidPort(const std::string&)`
+
+Requires one to five decimal digits and accepts only ports from `1` through `65535`.
+
+### `isValidIpv4(const std::string&)`
+
+Splits an IPv4 address into four dot-separated segments and validates every segment with `isValidIpv4Segment()`.
+
+### `isValidIpv4Segment(const std::string&)`
+
+Validates one IPv4 segment: one to three digits, numeric range `0-255`, and no leading zeroes except for the value `0`.
+
+### `isValidDomain(const std::string&)`
+
+Splits a hostname into labels, checks the total length, and validates each label with `isValidDomainLabel()`.
+
+### `isValidDomainLabel(const std::string&, bool)`
+
+Validates label length, allowed characters, and hyphen placement. When the label is the top-level label, it must contain at least one letter.
+
+## Body and path handling
+
+### `appendBody(const char*, size_t)`
+
+Appends raw bytes to `_body`. It accepts binary data and does nothing for a null pointer or zero length.
+
+### `makeFullPath(const LocationConfig&)`
+
+Combines the matched location's root with the request URI after removing the location prefix. It also normalizes the slash between the root and remaining URI path.

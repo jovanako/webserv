@@ -77,65 +77,69 @@ static std::string decodePercentEncoding(const std::string& input) {
 	return decoded;
 }
 
-void HttpRequest::setUri(const std::string& uri) {
-	// absolute path requirement
+int HttpRequest::validateUriStructure(const std::string& uri) const {
 	if (uri.empty() || uri[0] != '/') {
-		_errorCode = 400; // bad request
-		_parseState = PARSE_ERROR;
-		return;
-	}
-	
-	// length limits
-	if (uri.length() > MAX_URI_LENGTH) {
-		_errorCode = 414; // uri too long
-		_parseState = PARSE_ERROR;
-		return;
+		return 400;
 	}
 
-	// path traversal / security
-	// Block sequences that allow directory climbing: "/../", ending with "/..", or before queries "/..?"
+	if (uri.length() > MAX_URI_LENGTH) {
+		return 414;
+	}
+
 	if (uri.find("/../") != std::string::npos
 		|| (uri.length() >= 3 && uri.substr(uri.length() - 3) == "/..")
 		|| uri.find("/..?") != std::string::npos) {
-			_errorCode = 403; // forbidden
-			_parseState = PARSE_ERROR;
-			return;
+		return 403;
 	}
+	return 0;
+}
 
-	// illegal characters & percent-encoding validation
+bool HttpRequest::hasValidUriCharacters(const std::string& uri) const {
 	for (size_t i = 0; i < uri.length(); ++i) {
 		unsigned char c = static_cast<unsigned char>(uri[i]);
 		if (c <= 32 || c >= 127) {
-            _errorCode = 400; // Bad Request
-            _parseState = PARSE_ERROR;
-            return;
+			return false;
 		}
 
 		if (c == '%') {
 			if (i + 2 >= uri.length()
-				|| !std::isxdigit(static_cast<unsigned char> (uri[i + 1]))
-				|| !std::isxdigit(static_cast<unsigned char> (uri[i + 2]))) {
-					_errorCode = 400;
-					_parseState = PARSE_ERROR;
-					return;
+				|| !std::isxdigit(static_cast<unsigned char>(uri[i + 1]))
+				|| !std::isxdigit(static_cast<unsigned char>(uri[i + 2]))) {
+				return false;
 			}
 			i += 2;
 		}
 	}
-	// split the validated URI into Path and Query String, then decode
+	return true;
+}
+
+void HttpRequest::storeUriParts(const std::string& uri) {
 	size_t queryPos = uri.find('?');
 	if (queryPos != std::string::npos) {
 		std::string rawUri = uri.substr(0, queryPos);
 		std::string rawQuery = uri.substr(queryPos + 1);
-
-		// decode both parts before saving them to the class variables
 		_uri = decodePercentEncoding(rawUri);
 		_queryString = decodePercentEncoding(rawQuery);
 	} else {
-		// no query string, just decode the whole path
 		_uri = decodePercentEncoding(uri);
 		_queryString = "";
 	}
+}
+
+void HttpRequest::setUri(const std::string& uri) {
+	int structureError = validateUriStructure(uri);
+	if (structureError != 0) {
+		_errorCode = structureError;
+		_parseState = PARSE_ERROR;
+		return;
+	}
+
+	if (!hasValidUriCharacters(uri)) {
+		_errorCode = 400;
+		_parseState = PARSE_ERROR;
+		return;
+	}
+	storeUriParts(uri);
 }
 
 void HttpRequest::setVersion(const std::string& version) {
@@ -220,130 +224,181 @@ static bool isValidHeaderKey(const std::string& key) {
 	return true;
 }
 
-static bool isValidIpv4(const std::string& host) {
-    if (host.empty() || host[0] == '.' ||  host[host.length() - 1] == '.')
+static bool isValidIpv4Segment(const std::string& segment) {
+	if (segment.empty() || segment.length() > 3)
 		return false;
 
-	std::istringstream ss(host);
-    std::string segment;
-    int count = 0; // counts how many segments have been found
+	for (size_t i = 0; i < segment.length(); ++i) {
+		if (!std::isdigit(static_cast<unsigned char>(segment[i])))
+			return false;
+	}
 
-    while (std::getline(ss, segment, '.')) {
-        if (segment.empty() || segment.length() > 3)
-            return false;
+	std::istringstream numStream(segment);
+	int value;
+	numStream >> value;
+	if (value < 0 || value > 255)
+		return false;
 
-        for (size_t i = 0; i < segment.length(); ++i) {
-            if (!std::isdigit(static_cast<unsigned char>(segment[i])))
-                return false;
-        }
+	if (segment.length() > 1 && segment[0] == '0')
+		return false;
 
-        std::istringstream numStream(segment);
-        int val;
-        numStream >> val;
-        // Check range [0, 255] - the valid bounds of an IPv4 octet
-        if (val < 0 || val > 255)
-            return false;
+	return true;
+}
 
-        // Reject leading zeros (e.g. "01" is invalid)
-        if (segment.length() > 1 && segment[0] == '0')
-            return false;
+static bool isValidIpv4(const std::string& host) {
+	if (host.empty() || host[0] == '.' || host[host.length() - 1] == '.')
+		return false;
 
-        count++;
-    }
+	std::istringstream stream(host);
+	std::string segment;
+	int segmentCount = 0;
 
-    // Must have exactly 4 octets and no trailing dot
-    return count == 4;
+	while (std::getline(stream, segment, '.')) {
+		if (!isValidIpv4Segment(segment))
+			return false;
+		segmentCount++;
+	}
+
+	return segmentCount == 4;
+}
+
+static bool isValidDomainLabel(const std::string& label, bool isTopLevel) {
+	if (label.empty() || label.length() > 63)
+		return false;
+
+	if (label[0] == '-' || label[label.length() - 1] == '-')
+		return false;
+
+	bool hasAlpha = false;
+	for (size_t i = 0; i < label.length(); ++i) {
+		unsigned char c = static_cast<unsigned char>(label[i]);
+		if (!std::isalnum(c) && c != '-')
+			return false;
+		if (std::isalpha(c))
+			hasAlpha = true;
+	}
+
+	return !isTopLevel || hasAlpha;
 }
 
 static bool isValidDomain(const std::string& host) {
-    if (host.empty() || host.length() > 253)
-        return false;
+	if (host.empty() || host.length() > 253)
+		return false;
 
-    // Check each dot-separated label
-    size_t start = 0;
-    while (start < host.length()) {
-        size_t end = host.find('.', start);
-        if (end == std::string::npos)
-            end = host.length();
+	size_t start = 0;
+	while (start < host.length()) {
+		size_t end = host.find('.', start);
+		if (end == std::string::npos)
+			end = host.length();
 
-        std::string label = host.substr(start, end - start);
+		std::string label = host.substr(start, end - start);
+		if (!isValidDomainLabel(label, end == host.length()))
+			return false;
 
-        // Label length must be between 1 and 63 characters
-        if (label.empty() || label.length() > 63)
-            return false;
+		start = end + 1;
+	}
 
-        // Label cannot start or end with a hyphen
-        if (label[0] == '-' || label[label.length() - 1] == '-')
-            return false;
+	return true;
+}
 
-        // All characters in label must be alphanumeric or hyphen
+static bool isValidPort(const std::string& portStr) {
+	if (portStr.empty() || portStr.length() > 5)
+		return false;
 
-		bool hasAlpha = false;
-		for (size_t i = 0; i < label.length(); ++i) {
-            char c = label[i];
-            if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-')
-                return false;
-            if (std::isalpha(static_cast<unsigned char>(c)))
-                hasAlpha = true;
-        }
+	for (size_t i = 0; i < portStr.length(); ++i) {
+		if (!std::isdigit(static_cast<unsigned char>(portStr[i])))
+			return false;
+	}
 
-        // If this is the last label (the TLD), it must contain at least one letter
-        if (end == host.length() && !hasAlpha)
-            return false;
+	std::istringstream stream(portStr);
+	long port;
+	stream >> port;
+	return port >= 1 && port <= 65535;
+}
 
-        start = end + 1;
-    }
+static bool splitHostAndPort(const std::string& hostHeaderValue,
+	std::string& host) {
+	size_t colonPos = hostHeaderValue.find(':');
+	if (colonPos == std::string::npos) {
+		host = hostHeaderValue;
+		return true;
+	}
 
-    return true;
+	host = hostHeaderValue.substr(0, colonPos);
+	std::string portStr = hostHeaderValue.substr(colonPos + 1);
+	return isValidPort(portStr);
 }
 
 static bool isValidHost(const std::string& hostHeaderValue) {
-    if (hostHeaderValue.empty())
-        return false;
+	if (hostHeaderValue.empty())
+		return false;
 
-    std::string host = hostHeaderValue;
+	std::string host;
+	if (!splitHostAndPort(hostHeaderValue, host))
+		return false;
 
-    // Split off the optional port (:port)
-    size_t colonPos = hostHeaderValue.find(':');
-    if (colonPos != std::string::npos) {
-        host = hostHeaderValue.substr(0, colonPos);
-        std::string portStr = hostHeaderValue.substr(colonPos + 1);
+	return isValidIpv4(host) || isValidDomain(host);
+}
 
-        if (portStr.empty())
-            return false;
+static std::string toLowerCopy(const std::string& value) {
+	std::string lowerValue = value;
+	for (size_t i = 0; i < lowerValue.length(); ++i) {
+		lowerValue[i] = static_cast<char>(std::tolower(
+			static_cast<unsigned char>(lowerValue[i])));
+	}
+	return lowerValue;
+}
 
-        for (size_t i = 0; i < portStr.length(); ++i) {
-            if (!std::isdigit(static_cast<unsigned char>(portStr[i])))
-                return false;
-        }
+static bool isDuplicateRestrictedHeader(const std::string& key,
+	const std::map<std::string, std::string>& headers) {
+	if (key != "host" && key != "content-length"
+		&& key != "transfer-encoding") {
+		return false;
+	}
+	return headers.find(key) != headers.end();
+}
 
-        std::istringstream ss(portStr);
-        long port;
-        ss >> port;
-        if (port < 1 || port > 65535)
-            return false;
-    }
+int HttpRequest::validateTransferEncoding(const std::string& value) {
+	if (_headers.find("content-length") != _headers.end())
+		return 400;
 
-    if (isValidIpv4(host))
-        return true;
+	if (toLowerCopy(value) != "chunked")
+		return 501;
 
-    return isValidDomain(host);
+	_isChunked = true;
+	return 0;
+}
+
+int HttpRequest::validateContentLength(const std::string& value) {
+	if (_headers.find("transfer-encoding") != _headers.end())
+		return 400;
+
+	if (value.empty())
+		return 400;
+
+	for (size_t i = 0; i < value.length(); ++i) {
+		if (!std::isdigit(static_cast<unsigned char>(value[i])))
+			return 400;
+	}
+
+	std::istringstream stream(value);
+	size_t length;
+	if (!(stream >> length))
+		return 400;
+
+	setContentLength(length);
+	return 0;
 }
 
 void HttpRequest::addHeader(const std::string& key, const std::string& value) {
 	if (!isValidHeaderKey(key)) {
 		return handleError(*this, 400);
 	}
-	std::string lowerKey = key;
-	for (size_t i = 0; i < lowerKey.length(); ++i) {
-		lowerKey[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(lowerKey[i])));
-	}
+	std::string lowerKey = toLowerCopy(key);
 
 	// reject if host, content-length or transfer-encoding have duplicates
-	if (lowerKey == "host" || lowerKey == "content-length" || lowerKey == "transfer-encoding") {
-		if(_headers.find(lowerKey) != _headers.end()) {
-			return handleError(*this, 400);
-		}
+	if (isDuplicateRestrictedHeader(lowerKey, _headers)) {
+		return handleError(*this, 400);
 	}
 
 	if (lowerKey == "host" && !isValidHost(value)) {
@@ -352,42 +407,15 @@ void HttpRequest::addHeader(const std::string& key, const std::string& value) {
 
 	// a single HTTP request cannot contain both a Content-Length header and a Transfer-Encoding header
 	if (lowerKey == "transfer-encoding") {
-		if (_headers.find("content-length") != _headers.end()) {
-			return handleError(*this, 400);
-		}
-
-		std::string lowerVal = value;
-		for (size_t i = 0; i < lowerVal.length(); ++i) {
-			lowerVal[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(lowerVal[i])));
-		}
-		// transfer-encoding can have other unsupported values
-		if (lowerVal != "chunked") {
-			return handleError(*this, 501); // not implemented
-		}
-		_isChunked = true;
+		int errorCode = validateTransferEncoding(value);
+		if (errorCode != 0)
+			return handleError(*this, errorCode);
 	}
 
 	if (lowerKey == "content-length") {
-		if (_headers.find("transfer-encoding") != _headers.end()) {
-			return handleError(*this, 400);
-		}
-
-		if (value.empty()) {
-			return handleError(*this, 400);
-		}
-
-		for (size_t i = 0; i < value.length(); ++i) {
-			if (!std::isdigit(static_cast<unsigned char>(value[i]))) {
-				return handleError(*this, 400);
-			}
-		}
-
-		std::istringstream iss(value);
-		size_t len;
-		if (!(iss >> len)) {
-			return handleError(*this, 400);
-		}
-		setContentLength(len);
+		int errorCode = validateContentLength(value);
+		if (errorCode != 0)
+			return handleError(*this, errorCode);
 	}	
 	
 	_headers[lowerKey] = value;
