@@ -400,3 +400,154 @@ Checks if any events (`revents`) occurred for this specific socket. If nothing h
 
 - `int currentFd = pollFds[i].fd;`  
 Saves the active file descriptor to a local variable for easier access.
+
+# Current `ServerManager` Function Map
+
+This section describes the current refactored structure. The older `run()` walkthrough above explains the same event-loop ideas, but the code now distributes those responsibilities across smaller functions.
+
+## Startup and listening sockets
+
+### `initServers()`
+
+Coordinates startup for every `ServerConfig`:
+
+1. Reads the configured host and port.
+2. Skips duplicate host/port pairs so virtual hosts can share one listening socket.
+3. Calls `createListeningSocket()` to resolve the address and create a file descriptor.
+4. Calls `configureListeningSocket()` to make the descriptor reusable, non-blocking, bound, and listening.
+5. Calls `registerListeningSocket()` to add the successful socket to the manager's tracking containers.
+
+`initServers()` decides which server should be created, but delegates the socket details to helpers.
+
+### `createListeningSocket(const ServerConfig&, addrinfo*&)`
+
+Builds the `addrinfo` hints for IPv4/TCP listening, calls `getaddrinfo()`, and creates the socket with the returned family, socket type, and protocol. It returns the new descriptor or `-1` on failure. When socket creation fails after address resolution, it releases `serverInfo`.
+
+### `configureListeningSocket(...)`
+
+Coordinates the configuration of one newly created listening socket. It calls these helpers in order:
+
+1. `enableAddressReuse()`
+2. `setListeningSocketNonBlocking()`
+3. `bindListeningSocket()`
+4. `startListening()`
+
+If any step fails, it returns `false`; otherwise it returns `true`.
+
+### `enableAddressReuse(int)`
+
+Sets `SO_REUSEADDR` on the socket so the server can reuse a recently released address and port.
+
+### `setListeningSocketNonBlocking(int, host, port)`
+
+Reads the descriptor flags with `fcntl(F_GETFL)`, adds `O_NONBLOCK`, and writes the flags back with `fcntl(F_SETFL)`. It logs failures, closes the descriptor, and returns `false` when configuration cannot be completed.
+
+### `bindListeningSocket(int, addrinfo*, host, port)`
+
+Binds the descriptor to the resolved address. It releases the `addrinfo` data after a successful bind. On failure it logs the address, closes the descriptor, releases the address data, and returns `false`.
+
+### `startListening(int)`
+
+Calls `listen(listenFd, 128)` to place the socket into listening mode with a backlog of 128 pending connections. It closes the descriptor and returns `false` if `listen()` fails.
+
+### `registerListeningSocket(int, serverIndex, host, port, boundAddresses)`
+
+Records the successful host/port pair in `boundAddresses`, maps the listening descriptor to its server configuration in `_listenSockets`, and adds a `pollfd` watching `POLLIN` to `_pollFds`.
+
+## Accepting clients
+
+### `acceptClient(int, pendingFds)`
+
+Coordinates the creation of one client connection:
+
+1. `acceptConnection()` obtains a client descriptor.
+2. `setClientNonBlocking()` configures that descriptor for non-blocking I/O.
+3. `registerClientSocket()` adds it to `pendingFds` with `POLLIN` enabled.
+4. `configureClient()` assigns the listening server and all virtual-host configurations.
+5. The initialized `Client` is stored in `_clients`.
+
+New descriptors go into `pendingFds` first so `_pollFds` is not modified while the current poll cycle is being iterated.
+
+### `acceptConnection(int)`
+
+Calls `accept()` on a listening descriptor. `EAGAIN` and `EWOULDBLOCK` mean there is no connection ready at that moment, so the function returns `-1` without treating it as a fatal server error.
+
+### `setClientNonBlocking(int)`
+
+Applies `O_NONBLOCK` to an accepted client descriptor.
+
+### `registerClientSocket(int, pendingFds)`
+
+Creates a `pollfd` for a new client with `events = POLLIN` and `revents = 0`, then appends it to the current cycle's pending descriptor list.
+
+### `configureClient(Client&, listenFd)`
+
+Looks up the server configuration associated with the listening descriptor, assigns it to the client, and gives the client the complete list of virtual-host configurations.
+
+## Client event handling
+
+### `handleClientEvent(pollIndex)`
+
+Coordinates one already-connected client after `poll()` reports activity:
+
+1. `handleClientInput()` handles hang-ups and readable data.
+2. `processClient()` prepares a response when the request is complete.
+3. `writeClientResponse()` sends data when the socket is writable.
+4. `removeCompletedClient()` removes clients that reached `DONE`.
+5. `updateClientPollEvents()` switches monitoring between `POLLIN` and `POLLOUT`.
+
+The return value is `true` when the client was removed, because removing an element shifts the `_pollFds` vector and the caller must not increment its index.
+
+### `handleClientInput(pollIndex, clientFd, Client&)`
+
+Handles `POLLHUP` without readable data, reads client input when `POLLIN` is set, and removes the client if reading changes its state to `DONE`.
+
+### `processClient(Client&)`
+
+Calls `Client::handleProcessing()` only when the client has reached the `PROCESSING` state.
+
+### `writeClientResponse(pollIndex, Client&)`
+
+Calls `Client::handleWrite()` only when the descriptor is writable and the client is in `WRITING_RESPONSE`.
+
+### `removeCompletedClient(clientFd, Client&)`
+
+Checks for the `DONE` state. If reached, it calls `Client::handleDone()`, closes and removes the client, and returns `true`.
+
+### `updateClientPollEvents(pollIndex, const Client&)`
+
+Sets the descriptor's requested event to `POLLOUT` while a response is being written; otherwise it requests `POLLIN`.
+
+## Main event loop
+
+### `run()`
+
+Owns the server's infinite event-loop lifecycle. Each iteration waits for activity, processes ready descriptors, and appends newly accepted clients to `_pollFds`.
+
+### `waitForEvents()`
+
+Calls `poll()` for all descriptors. It returns `true` when polling succeeds and `false` when the call is interrupted or fails. Poll errors are logged and do not terminate the loop.
+
+### `processPollEvents(pendingFds)`
+
+Walks through `_pollFds`. Descriptors with no returned events are skipped; active descriptors are passed to `handlePollEvent()`. It keeps the index unchanged when a descriptor is removed.
+
+### `handlePollEvent(pollIndex, pendingFds)`
+
+Dispatches one active descriptor:
+
+- `POLLERR` or `POLLNVAL`: closes and removes the descriptor.
+- A listening descriptor with `POLLIN`: calls `acceptClient()`.
+- Any other active descriptor: calls `handleClientEvent()`.
+
+Its return value tells `processPollEvents()` whether the `_pollFds` vector changed and the current index must be reused.
+
+### `addPendingClients(pendingFds)`
+
+Appends accepted client descriptors to `_pollFds` after the current descriptor iteration finishes, then clears the temporary list.
+
+## Cleanup
+
+### `removeClient(clientFd)`
+
+Closes the client descriptor, removes its `Client` object from `_clients`, and erases its `pollfd` entry from `_pollFds`.

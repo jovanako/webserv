@@ -21,7 +21,7 @@ ServerManager& ServerManager::operator=(const ServerManager& other) {
 
 ServerManager::~ServerManager() {}
 
-void ServerManager::acceptClient(int listenFd, std::vector<struct pollfd>& pendingFds) {
+int ServerManager::acceptConnection(int listenFd) {
 	// extracts the first connection request and creates new fd for the client
 	int clientFd = accept(listenFd, NULL, NULL);
 	// if there are no pending connections, return to the polling loop
@@ -31,27 +31,44 @@ void ServerManager::acceptClient(int listenFd, std::vector<struct pollfd>& pendi
 			std::cerr << "Error: accept() failed for listenFd " << listenFd
 					  << " (errno: " << errno << ")\n";
 		}
-		return; // safely exit the function to keep the server loop running
+		return -1; // safely exit the function to keep the server loop running
 	}
-	
-	fcntl(clientFd, F_SETFL, O_NONBLOCK);
+	return clientFd;
+}
 
+void ServerManager::setClientNonBlocking(int clientFd) {
+	fcntl(clientFd, F_SETFL, O_NONBLOCK);
+}
+
+void ServerManager::registerClientSocket(int clientFd,
+	std::vector<struct pollfd>& pendingFds) {
 	struct pollfd pfd;
 	pfd.fd = clientFd;
 	pfd.events = POLLIN;
 	pfd.revents = 0;
-	
 	pendingFds.push_back(pfd);
+}
 
-	Client client(clientFd);
-
+void ServerManager::configureClient(Client& client, int listenFd) {
 	std::map<int, size_t>::iterator it = _listenSockets.find(listenFd);
 	if (it != _listenSockets.end()) {
 		client.setServer(_servers[it->second]);
 	}
 
 	client.setVirtualHosts(_servers);
-	
+}
+
+void ServerManager::acceptClient(int listenFd, std::vector<struct pollfd>& pendingFds) {
+	int clientFd = acceptConnection(listenFd);
+	if (clientFd < 0) {
+		return;
+	}
+
+	setClientNonBlocking(clientFd);
+	registerClientSocket(clientFd, pendingFds);
+
+	Client client(clientFd);
+	configureClient(client, listenFd);
 	_clients[clientFd] = client;
 }
 
@@ -64,6 +81,186 @@ void ServerManager::removeClient(int clientFd) {
 			break;
 		}
 	}
+}
+
+bool ServerManager::removeCompletedClient(int clientFd, Client& client) {
+	if (client.getClientState() != Client::DONE) {
+		return false;
+	}
+
+	client.handleDone();
+	removeClient(clientFd);
+	return true;
+}
+
+bool ServerManager::handleClientInput(size_t pollIndex, int clientFd, Client& client) {
+	// handle POLLHUP only if there's no data left to read
+	if ((_pollFds[pollIndex].revents & POLLHUP) &&
+		!(_pollFds[pollIndex].revents & POLLIN)) {
+		removeClient(clientFd);
+		return true;
+	}
+
+	// read incoming data if readable
+	if (_pollFds[pollIndex].revents & POLLIN) {
+		client.handleRead();
+	}
+
+	// if read caused client disconnect / error, clean up immediately
+	return removeCompletedClient(clientFd, client);
+}
+
+void ServerManager::processClient(Client& client) {
+	// perform route matching and preparation if reading is complete
+	if (client.getClientState() == Client::PROCESSING) {
+		client.handleProcessing();
+	}
+}
+
+void ServerManager::writeClientResponse(size_t pollIndex, Client& client) {
+	// send response if socket is writable
+	if ((_pollFds[pollIndex].revents & POLLOUT) &&
+		(client.getClientState() == Client::WRITING_RESPONSE)) {
+		client.handleWrite();
+	}
+}
+
+void ServerManager::updateClientPollEvents(size_t pollIndex, const Client& client) {
+	// keep poll events synchronized with client state
+	if (client.getClientState() == Client::WRITING_RESPONSE) {
+		_pollFds[pollIndex].events = POLLOUT;
+	} else {
+		_pollFds[pollIndex].events = POLLIN;
+	}
+}
+
+bool ServerManager::handleClientEvent(size_t pollIndex) {
+	int currentFd = _pollFds[pollIndex].fd;
+	std::map<int, Client>::iterator clientIter = _clients.find(currentFd);
+	if (clientIter == _clients.end()) {
+		return false;
+	}
+
+	Client& client = clientIter->second;
+	if (handleClientInput(pollIndex, currentFd, client)) {
+		return true;
+	}
+
+	processClient(client);
+	writeClientResponse(pollIndex, client);
+	if (removeCompletedClient(currentFd, client)) {
+		return true;
+	}
+
+	updateClientPollEvents(pollIndex, client);
+	return false;
+}
+
+void ServerManager::registerListeningSocket(int listenFd, size_t serverIndex,
+	const std::string& host, int port,
+	std::set<std::pair<std::string, int> >& boundAddresses) {
+	// add the successfully bound host and port to our tracking set
+	boundAddresses.insert(std::make_pair(host, port));
+
+	// Map the new socket to its configuration so acceptClient() can pass it to the Client
+	_listenSockets[listenFd] = serverIndex;
+
+	// Register the listening socket in the dynamic poll vector
+	struct pollfd pfd;
+	pfd.fd = listenFd;
+	pfd.events = POLLIN;
+	pfd.revents = 0;
+	_pollFds.push_back(pfd);
+}
+
+int ServerManager::createListeningSocket(const ServerConfig& server,
+	struct addrinfo*& serverInfo) {
+	struct addrinfo hints;
+	std::memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_PASSIVE;
+
+	std::string host = server.getHost();
+	std::string portStr = server.getPortString();
+	if (getaddrinfo(host.c_str(), portStr.c_str(), &hints, &serverInfo) != 0) {
+		std::cerr << "Error: getaddrinfo failed\n";
+		return -1;
+	}
+
+	int listenFd = socket(serverInfo->ai_family, serverInfo->ai_socktype,
+		serverInfo->ai_protocol);
+	if (listenFd < 0) {
+		freeaddrinfo(serverInfo);
+		return -1;
+	}
+	return listenFd;
+}
+
+bool ServerManager::setListeningSocketNonBlocking(int listenFd,
+	const std::string& host, int port) {
+	int flags = fcntl(listenFd, F_GETFL, 0);
+	if (flags == -1) {
+		std::cerr << "Error: fcntl(F_GETFL) failed for host " << host << ":" << port << std::endl;
+		close(listenFd);
+		return false;
+	}
+
+	flags |= O_NONBLOCK;
+	if (fcntl(listenFd, F_SETFL, flags) == -1) {
+		std::cerr << "Failed to set non-blocking flag" << std::endl;
+		close(listenFd);
+		return false;
+	}
+	return true;
+}
+
+bool ServerManager::bindListeningSocket(int listenFd,
+	struct addrinfo* serverInfo, const std::string& host,
+	const std::string& portStr) {
+	if (bind(listenFd, serverInfo->ai_addr, serverInfo->ai_addrlen) < 0) {
+		std::cerr << "Error: bind failed for " << host << ":" << portStr << "\n";
+		close(listenFd);
+		freeaddrinfo(serverInfo);
+		return false;
+	}
+
+	freeaddrinfo(serverInfo);
+	return true;
+}
+
+void ServerManager::enableAddressReuse(int listenFd) {
+	int opt = 1;
+	setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+}
+
+bool ServerManager::startListening(int listenFd) {
+	if (listen(listenFd, 128) < 0) {
+		std::cerr << "Error: listen failed\n";
+		close(listenFd);
+		return false;
+	}
+	return true;
+}
+
+bool ServerManager::configureListeningSocket(int listenFd,
+	struct addrinfo* serverInfo, const std::string& host, int port,
+	const std::string& portStr) {
+	// allow immediate reuse of the port
+	enableAddressReuse(listenFd);
+
+	if (!setListeningSocketNonBlocking(listenFd, host, port)) {
+		return false;
+	}
+
+	if (!bindListeningSocket(listenFd, serverInfo, host, portStr)) {
+		return false;
+	}
+
+	if (!startListening(listenFd)) {
+		return false;
+	}
+	return true;
 }
 
 void ServerManager::initServers() {
@@ -81,74 +278,86 @@ void ServerManager::initServers() {
 			continue;
 		}
 
-		struct addrinfo hints, *serverInfo;
-		std::memset(&hints, 0, sizeof(hints));
-		hints.ai_family = AF_INET; // IPv4 (ai stands for address info)
-		hints.ai_socktype = SOCK_STREAM; // TCP
-		hints.ai_flags = AI_PASSIVE; // instructs getaddrinfo to return a bindable address if host is null
-
-		std::string portStr = _servers[i].getPortString(); // getaddrinfo() needs port as a string
-
-		if (getaddrinfo(host.c_str(), portStr.c_str(), &hints, &serverInfo) != 0) {
-			std::cerr << "Error: getaddrinfo failed\n";
-			continue;
-		}
-
-		int listenFd = socket(serverInfo->ai_family, serverInfo->ai_socktype, serverInfo->ai_protocol);
+		struct addrinfo* serverInfo;
+		std::string portStr = _servers[i].getPortString();
+		int listenFd = createListeningSocket(_servers[i], serverInfo);
 		if (listenFd < 0) {
-			freeaddrinfo(serverInfo);
 			continue;
 		}
 		
-		// allow immediate reuse of the port	
-		int opt = 1;
-        setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-
-		// retrieve the current flags
-		int flags = fcntl(listenFd, F_GETFL, 0);
-		if (flags == -1) {
-			std::cerr << "Error: fcntl(F_GETFL) failed for host " << host << ":" << port << std::endl;;
-			close(listenFd);
-			continue; // skip this server block and move to the next one
-		}
-
-		flags |= O_NONBLOCK; // append the non-blocking flag
-
-		if (fcntl(listenFd, F_SETFL, flags) == -1) {
-			std::cerr << "Failed to set non-blocking flag" << std::endl;
-			close(listenFd);
+		if (!configureListeningSocket(listenFd, serverInfo, host, port, portStr)) {
 			continue;
 		}
 
-		// assigns a specific network address (IP address and port) to listenFd
-		if (bind(listenFd, serverInfo->ai_addr, serverInfo->ai_addrlen) < 0) {
-			std::cerr << "Error: bind failed for " << host << ":" << portStr << "\n";
-			close(listenFd);
-			freeaddrinfo(serverInfo);
+		registerListeningSocket(listenFd, i, host, port, boundAddresses);
+	}
+}
+
+bool ServerManager::waitForEvents() {
+	if (poll(&_pollFds[0], _pollFds.size(), -1) >= 0) {
+		return true;
+	}
+
+	if (errno == EINTR) {
+		return false;
+	}
+
+	std::cerr << "Error: poll() failed: " << strerror(errno) << std::endl;
+	return false;
+}
+
+void ServerManager::addPendingClients(std::vector<struct pollfd>& pendingFds) {
+	if (pendingFds.empty()) {
+		return;
+	}
+
+	_pollFds.insert(_pollFds.end(), pendingFds.begin(), pendingFds.end());
+	pendingFds.clear();
+}
+
+bool ServerManager::handlePollEvent(size_t pollIndex,
+	std::vector<struct pollfd>& pendingFds) {
+	int currentFd = _pollFds[pollIndex].fd;
+	std::map<int, size_t>::iterator serverIter = _listenSockets.find(currentFd);
+
+	if (_pollFds[pollIndex].revents & (POLLERR | POLLNVAL)) {
+		if (serverIter != _listenSockets.end()) {
+			// it's a listening socket error (critical failure)
+			std::cerr << "Critical error on listening socket fd: " << currentFd << std::endl;
+			close(currentFd);
+			_listenSockets.erase(serverIter);
+			_pollFds.erase(_pollFds.begin() + pollIndex);
+		} else {
+			// it is definitely a client socket, safe to remove
+			removeClient(currentFd);
+		}
+		return true;
+	}
+
+	// if the event is on a listening socket, accept the new client
+	if (serverIter != _listenSockets.end()) {
+		if (_pollFds[pollIndex].revents & POLLIN) {
+			acceptClient(currentFd, pendingFds);
+		}
+		return false;
+	}
+
+	// handle existing client traffic
+	return handleClientEvent(pollIndex);
+}
+
+void ServerManager::processPollEvents(std::vector<struct pollfd>& pendingFds) {
+	for (size_t i = 0; i < _pollFds.size(); ) {
+		// checks if any events were returned for the current socket
+		if (_pollFds[i].revents == 0) {
+			++i;
 			continue;
 		}
 
-		freeaddrinfo(serverInfo);
-
-		// mark the socket active and queue up to 128 pending connection requests at a time
-		if (listen(listenFd, 128) < 0) {
-			std::cerr << "Error: listen failed\n";
-			close(listenFd);
+		if (handlePollEvent(i, pendingFds)) {
 			continue;
 		}
-
-		// add the successfully bound host and port to our tracking set
-		boundAddresses.insert(std::make_pair(host, port));
-
-		// Map the new socket to its configuration so acceptClient() can pass it to the Client
-		_listenSockets[listenFd] = i;
-
-		// Register the listening socket in the dynamic poll vector
-		struct pollfd pfd;
-		pfd.fd = listenFd;
-		pfd.events = POLLIN;
-		pfd.revents = 0;
-		_pollFds.push_back(pfd);
+		++i;
 	}
 }
 
@@ -158,110 +367,11 @@ void ServerManager::run() {
 
 	// begins the infinite event loop that keeps the server running continuously
 	while (true) {
-		/* calls the poll() function to monitor all stored file descriptors blocking
-		indefinitely (-1) until an I/O event occurs; -1 puts the process to sleep in 
-		the operating system until actual network activity happens */
-		if (poll(&_pollFds[0], _pollFds.size(), -1) < 0) {
-			// if poll was interrupted by a system signal (e.g., CGI child process ending)
-			if (errno == EINTR) {
-				continue;
-			}
-			// for all other errors, log it but do NOT crash the server
-			std::cerr << "Error: poll() failed: " << strerror(errno) << std::endl;
-			continue; // skips the rest of the loop iteration if poll() encounters an error, preventing server crash
+		if (!waitForEvents()) {
+			continue;
 		}
 
-		for (size_t i = 0; i < _pollFds.size(); ) {
-			
-			// checks if any events were returned (revents) for the current socket
-			// if none, it increments the index and moves to the next descriptor
-			if (_pollFds[i].revents == 0) {
-				i++;
-				continue;
-			}
-
-			int currentFd = _pollFds[i].fd;
-			// checks whether the active file descriptor belongs to a main listening server socket
-			std::map<int, size_t>::iterator serverIter = _listenSockets.find(currentFd);
-
-			if (_pollFds[i].revents & (POLLERR | POLLNVAL)) {
-				if (serverIter != _listenSockets.end()) {
-					// it's a listening socket error (critical failure)
-					std::cerr << "Critical error on listening socket fd: " << currentFd << std::endl;
-					close(currentFd);
-					_listenSockets.erase(serverIter);
-					_pollFds.erase(_pollFds.begin() + i);
-				} else {
-					// it is definitely a client socket, safe to remove
-					removeClient(currentFd);
-				}
-				continue; // don't increment i, elements shifted
-			}
-
-			// if the event is on a listening socket, accept the new client
-			if (serverIter != _listenSockets.end()) {
-				if (_pollFds[i].revents & POLLIN) {
-					acceptClient(currentFd, pendingFds);
-				}
-				i++;
-				continue; // skip the rest, as listening sockets don't process HTTP data
-			}
-
-			// handle existing client traffic
-			std::map<int, Client>::iterator clientIter = _clients.find(currentFd);
-			if (clientIter != _clients.end()) {
-				Client& client = clientIter->second;
-
-				// handle POLLHUP only if there's no data left to read
-				if ((_pollFds[i].revents & POLLHUP) && !(_pollFds[i].revents & POLLIN)) {
-					removeClient(currentFd);
-					continue;
-				}
-
-				// read incoming data if readable
-				if (_pollFds[i].revents & POLLIN) {
-					client.handleRead();
-				}
-
-				// if read caused client disconnect / error, clean up immediately
-				if (client.getClientState() == Client::DONE) {
-					client.handleDone();
-					removeClient(currentFd);
-					continue;
-				}
-
-				// perform route matching and preparation if reading is complete
-				if (clientIter->second.getClientState() == Client::PROCESSING) {
-					clientIter->second.handleProcessing();
-				}
-
-				// send response if socket is writable
-				if ((_pollFds[i].revents & POLLOUT) &&
-					(client.getClientState() == Client::WRITING_RESPONSE)) {
-					clientIter->second.handleWrite();
-				}
-
-				// remove client if client requested termination or completed response
-				Client::ConnectionState state = client.getClientState();
-
-				if (state == Client::DONE) {
-					client.handleDone();
-					removeClient(currentFd);
-					continue; // do not increment i, elements shifted left
-				}
-
-				// 5. keep poll events synchronized with client state
-				if (state == Client::WRITING_RESPONSE) {
-					_pollFds[i].events = POLLOUT;					
-				} else {
-					_pollFds[i].events = POLLIN;
-				}
-			}
-			i++;
-		}
-		if (!pendingFds.empty()) {
-			_pollFds.insert(_pollFds.end(), pendingFds.begin(), pendingFds.end());
-			pendingFds.clear();
-		}
+		processPollEvents(pendingFds);
+		addPendingClients(pendingFds);
 	}
 }
