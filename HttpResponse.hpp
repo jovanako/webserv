@@ -12,6 +12,8 @@ class HttpResponse {
 		std::string							_statusMessage;
 		std::map<std::string, std::string>	_headers;
 		std::vector<char>					_body;
+		std::string						buildStatusLine() const;
+		void							appendHeaders(std::vector<char>& response) const;
 		
 	public:
 		HttpResponse();

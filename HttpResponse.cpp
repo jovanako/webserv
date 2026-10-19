@@ -92,11 +92,7 @@ void HttpResponse::setBody(const std::string& body) {
     _body.assign(body.begin(), body.end());
 }
 
-// Converts the object into raw bytes ready to pass to send()
-std::vector<char> HttpResponse::createResponse() const {
-    std::vector<char> response;
-
-    // 1. Status Line (e.g., "HTTP/1.1 200 OK\r\n")
+std::string HttpResponse::buildStatusLine() const {
     std::string version;
     if (_version.empty()) {
         version = "HTTP/1.0"; 
@@ -109,20 +105,28 @@ std::vector<char> HttpResponse::createResponse() const {
     oss << _statusCode;
     std::string statusCodeStr = oss.str();
 
-    std::string statusLine = version + " " + statusCodeStr + " " + _statusMessage + "\r\n";
-    response.insert(response.end(), statusLine.begin(), statusLine.end());
+    return version + " " + statusCodeStr + " " + _statusMessage + "\r\n";
+}
 
-    // 2. Headers (e.g., "Content-Type: text/html\r\n")
+void HttpResponse::appendHeaders(std::vector<char>& response) const {
     for (std::map<std::string, std::string>::const_iterator it = _headers.begin(); it != _headers.end(); ++it) {
         std::string headerLine = it->first + ": " + it->second + "\r\n";
         response.insert(response.end(), headerLine.begin(), headerLine.end());
     }
 
-    // 3. Mandatory empty line separating headers from the body ("\r\n")
     std::string crlf = "\r\n";
     response.insert(response.end(), crlf.begin(), crlf.end());
+}
 
-    // 4. Body (appended as raw bytes)
+// Converts the object into raw bytes ready to pass to send()
+std::vector<char> HttpResponse::createResponse() const {
+    std::vector<char> response;
+
+    std::string statusLine = buildStatusLine();
+    response.insert(response.end(), statusLine.begin(), statusLine.end());
+
+    appendHeaders(response);
+
     response.insert(response.end(), _body.begin(), _body.end());
 
     return response;
