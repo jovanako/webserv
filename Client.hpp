@@ -61,6 +61,31 @@ class Client {
 		void		resetForNextRequest();
 
 		int			handleGet(const LocationConfig& matchedLocation, std::string fullPath, const std::string uri);
+		bool		findIndexFile(const LocationConfig& matchedLocation,
+			std::string& fullPath, struct stat& pathStat) const;
+		int		serveAutoindex(const LocationConfig& matchedLocation,
+			const std::string& fullPath, const std::string& uri);
+		int		serveFile(const std::string& fullPath);
+		bool		redirectDirectoryRequest(const std::string& uri);
+		int		serveExistingPath(const LocationConfig& matchedLocation,
+			std::string& fullPath, struct stat& pathStat, const std::string& uri);
+		std::string buildUploadPath(const LocationConfig& matchedLocation,
+			const std::string& uri) const;
+		bool		writeUploadBody(std::ofstream& outFile,
+			const std::string& savePath);
+		void		setUploadResponse(const std::string& uri);
+		const LocationConfig* findMatchingLocation(const std::string& uri) const;
+		bool		isMethodAllowed(const LocationConfig& location,
+			const std::string& method) const;
+		bool		handleRedirect(const LocationConfig& location);
+		bool		tryCgiHandler(const LocationConfig& location,
+			const std::string& uri);
+		bool		dispatchMethod(const LocationConfig& location,
+			const std::string& method, const std::string& fullPath,
+			const std::string& uri);
+		bool		validateLocation(const LocationConfig* location);
+		bool		validateMethod(const LocationConfig& location,
+			const std::string& method);
 		int			handlePost(const LocationConfig& matchedLocation, const std::string uri);
 		int			handleDelete(const std::string& fullPath);
 		
@@ -75,6 +100,14 @@ class Client {
 		void handleWrite();
 		void handleProcessing();
 		void handleDone();
+		bool parseRequestLineParts(const std::string& requestLine,
+			std::string& method, std::string& uri, std::string& version) const;
+		bool applyRequestLine(const std::string& method, const std::string& uri,
+			const std::string& version);
+		bool parseRequestLine(size_t& firstLineEnd);
+		bool storeParsedHeader(const std::string& key,
+			const std::string& value);
+		bool parseHeaderLine(const std::string& line);
 		
 		void parseHeaders();
 		void parseChunkedBody();

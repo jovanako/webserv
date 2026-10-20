@@ -496,93 +496,114 @@ std::string generateAutoindex(const std::string& fullPath, const std::string& re
 	return html.str();
 }
 
+bool Client::findIndexFile(const LocationConfig& matchedLocation,
+	std::string& fullPath, struct stat& pathStat) const {
+	// search for an index file
+	const std::vector<std::string>& indices = matchedLocation.getIndex();
+	for (size_t i = 0; i < indices.size(); ++i) {
+		std::string indexPath = fullPath + indices[i];
+		struct stat indexStat;
+
+		if (stat(indexPath.c_str(), &indexStat) == 0 && S_ISREG(indexStat.st_mode)) {
+			fullPath = indexPath;
+			pathStat = indexStat;
+			return true;
+		}
+	}
+	return false;
+}
+
+int Client::serveAutoindex(const LocationConfig& matchedLocation,
+	const std::string& fullPath, const std::string& uri) {
+	if (!matchedLocation.getAutoindex()) {
+		buildErrorResponse(403);
+		return 0;
+	}
+
+	std::string htmlBody = generateAutoindex(fullPath, uri);
+	// opendir failed (likely due to permissions)
+	if (htmlBody.empty()) {
+		buildErrorResponse(403);
+		return 0;
+	}
+
+	// successfully generated the listing; set the response data
+	_response.setStatusCode(200);
+	_response.setBody(htmlBody);
+
+	std::ostringstream lengthStream;
+	lengthStream << htmlBody.length();
+	_response.setHeader("Content-Type", "text/html");
+	_response.setHeader("Content-Length", lengthStream.str());
+	//todo build and send response
+	return 1;
+}
+
+int Client::serveFile(const std::string& fullPath) {
+	// std::ios::in mode flag telling the stream to open file for reading (input)
+	// std::ios::binary mode flag that forces C++ to read the file byte-by-byte (not in text mode)
+	std::ifstream file(fullPath.c_str(), std::ios::in | std::ios::binary);
+	if (!file.is_open()) {
+		buildErrorResponse(403);
+		return 0;
+	}
+
+	std::ostringstream stream;
+	stream << file.rdbuf();
+	std::string fileContent = stream.str();
+	file.close();
+
+	_response.setStatusCode(200);
+	_response.setBody(fileContent);
+
+	std::ostringstream lengthStream;
+	lengthStream << fileContent.length();
+	_response.setHeader("Content-Length", lengthStream.str());
+	// mime-type logic
+	_response.setHeader("Content-Type", getMimeType(fullPath));
+	return 1;
+}
+
+bool Client::redirectDirectoryRequest(const std::string& uri) {
+	// enforce trailing slash on the URI
+	if (uri.empty() || uri[uri.length() - 1] == '/') {
+		return false;
+	}
+
+	_response.setHeader("Location", uri + "/");
+	buildErrorResponse(301); // moved permanently
+	return true;
+}
+
+int Client::serveExistingPath(const LocationConfig& matchedLocation,
+	std::string& fullPath, struct stat& pathStat, const std::string& uri) {
+	bool isFileToServe = false;
+	// check if it's a directory
+	if (S_ISDIR(pathStat.st_mode)) {
+		if (redirectDirectoryRequest(uri)) {
+			return 0;
+		}
+		if (!findIndexFile(matchedLocation, fullPath, pathStat)) {
+			return serveAutoindex(matchedLocation, fullPath, uri);
+		}
+		isFileToServe = true;
+	} else if (S_ISREG(pathStat.st_mode)) {
+		isFileToServe = true;
+	}
+
+	if (isFileToServe) {
+		return serveFile(fullPath);
+	}
+
+	buildErrorResponse(403);
+	return 0;
+}
+
 int Client::handleGet(const LocationConfig& matchedLocation, std::string fullPath, const std::string uri) {
 	struct stat pathStat;
 	// check if file exists
 	if (stat(fullPath.c_str(), &pathStat) == 0) {
-		bool isFileToServe = false;
-		// check if it's a directory
-		if (S_ISDIR(pathStat.st_mode)) {
-			// enforce trailing slash on the URI
-			if (!uri.empty() && uri[uri.length() - 1] != '/') {
-				_response.setHeader("Location", uri + "/");
-				buildErrorResponse(301); // moved permanently
-				return 0;
-			}
-			// search for an index file
-			bool indexFound = false;
-			const std::vector<std::string>& indices = matchedLocation.getIndex();
-			for (size_t i = 0; i < indices.size(); ++i) {
-				std::string indexPath = fullPath + indices[i];
-				struct stat indexStat;
-
-				if (stat(indexPath.c_str(), &indexStat) == 0 && S_ISREG(indexStat.st_mode)) {
-					fullPath = indexPath;
-					pathStat = indexStat;
-					indexFound = true;
-					break;
-				}
-			}
-			if (!indexFound) {
-				if (!(matchedLocation.getAutoindex())) {
-					buildErrorResponse(403);
-					return 0;
-				} else {
-					std::string htmlBody = generateAutoindex(fullPath, uri);
-
-					// opendir failed (likely due to permissions)
-					if (htmlBody.empty()) {
-						buildErrorResponse(403);
-						return 0;
-					}
-					// successfully generated the listing; set the response data
-					_response.setStatusCode(200);
-					_response.setBody(htmlBody);
-
-					std::ostringstream lengthStream;
-					lengthStream << htmlBody.length();
-
-					_response.setHeader("Content-Type", "text/html");
-					_response.setHeader("Content-Length", lengthStream.str());
-					return 1;
-					//ToDo build and sebd response
-				}
-			} else {
-				isFileToServe = true;
-			}
-		} else if (S_ISREG(pathStat.st_mode)) {
-			isFileToServe = true;
-		}
-		if (isFileToServe) {
-			
-			// std::ios::in mode flag telling the stream to open file for reading (input)
-			// std::ios::binary mode flag that forces C++ to read the file byte-by-byte (not in text mode)
-			std::ifstream file(fullPath.c_str(), std::ios::in | std::ios::binary);
-
-			if (!file.is_open()) {
-				buildErrorResponse(403);
-				return 0;
-			}
-
-			std::ostringstream ss;
-			ss << file.rdbuf();
-			std::string fileContent = ss.str();
-			file.close();
-
-			_response.setStatusCode(200);
-			_response.setBody(fileContent);
-
-			std::ostringstream lengthStream;
-			lengthStream << fileContent.length();
-			_response.setHeader("Content-Length", lengthStream.str());
-			// mime-type logic
-			std::string mimeType = getMimeType(fullPath);
-			_response.setHeader("Content-Type", mimeType);
-
-		} else {
-			buildErrorResponse(403);
-			return 0;
-		}
+		return serveExistingPath(matchedLocation, fullPath, pathStat, uri);
 	} else {
 		//the path does not exist on disc
 		buildErrorResponse(404);
@@ -591,8 +612,8 @@ int Client::handleGet(const LocationConfig& matchedLocation, std::string fullPat
 	return 1;
 }
 
-
-int Client::handlePost(const LocationConfig& matchedLocation, const std::string uri) {
+std::string Client::buildUploadPath(const LocationConfig& matchedLocation,
+	const std::string& uri) const {
 	size_t lastSlash = uri.find_last_of('/');
 	std::string filename;
 	if (lastSlash != std::string::npos) {
@@ -602,7 +623,36 @@ int Client::handlePost(const LocationConfig& matchedLocation, const std::string 
 	}
 
 	// create absolute path to save the file
-	std::string savePath = matchedLocation.getUploadStore() + filename;
+	return matchedLocation.getUploadStore() + filename;
+}
+
+bool Client::writeUploadBody(std::ofstream& outFile,
+	const std::string& savePath) {
+	// use write() so that it writes binary data correctly
+	const std::vector<char>& body = _request.getBody();
+	if (body.empty()) {
+		return true;
+	}
+
+	outFile.write(&body[0], body.size());
+	if (outFile.fail()) {
+		outFile.close();
+		std::remove(savePath.c_str());
+		buildErrorResponse(500); // internal server error
+		return false;
+	}
+	return true;
+}
+
+void Client::setUploadResponse(const std::string& uri) {
+	_response.setStatusCode(201);
+	_response.setHeader("Content-Length", "0");
+	_response.setHeader("Location", uri);
+}
+
+
+int Client::handlePost(const LocationConfig& matchedLocation, const std::string uri) {
+	std::string savePath = buildUploadPath(matchedLocation, uri);
 
 	// open an output file tream in binary mode to prevent corruption
 	std::ofstream outFile(savePath.c_str(), std::ios::out | std::ios::binary);
@@ -612,23 +662,12 @@ int Client::handlePost(const LocationConfig& matchedLocation, const std::string 
 		return 0;
 	}
 
-	// use write() so that it writes binary data correctly
-	const std::vector<char>& body = _request.getBody();
-	if (!body.empty()) {
-		outFile.write(&body[0], body.size());
-
-		if (outFile.fail()) {
-			outFile.close();
-			std::remove(savePath.c_str());
-			buildErrorResponse(500); // internal server error
-			return 0;
-		}
+	if (!writeUploadBody(outFile, savePath)) {
+		return 0;
 	}
 	outFile.close();
 
-	_response.setStatusCode(201);
-	_response.setHeader("Content-Length", "0");
-	_response.setHeader("Location", uri);
+	setUploadResponse(uri);
 	return 1;
 }
 
@@ -644,96 +683,137 @@ int Client::handleDelete(const std::string& fullPath) {
 	return 1;
 }
 
-void Client::handleProcessing() {
-	std::string uri = _request.getUri();
+const LocationConfig* Client::findMatchingLocation(const std::string& uri) const {
 	const LocationConfig* matchedLocation = NULL;
 	size_t longestMatch = 0;
-	bool cgiFlag = false;
 
 	const std::vector<LocationConfig>& locations = _server.getLocations();
 	for (std::vector<LocationConfig>::const_iterator it = locations.begin(); it != locations.end(); ++it) {
 		std::string locPath = it->getPath();
-
-		if (uri.find(locPath) == 0) {
-			if (locPath.length() > longestMatch) {
-				longestMatch = locPath.length();
-				matchedLocation = &(*it);
-			}
+		if (uri.find(locPath) == 0 && locPath.length() > longestMatch) {
+			longestMatch = locPath.length();
+			matchedLocation = &(*it);
 		}
 	}
-	if (matchedLocation == NULL) {
-		_response.setStatusCode(404);
-		buildErrorResponse(404); // !!! added 404 not found
-		finalizeResponse();
-		return;
-	}
+	return matchedLocation;
+}
 
-	std::string method = _request.getMethod();
-	bool isAllowed = false;
-	const std::vector<std::string> allowedMethods = matchedLocation->getAllowedMethods();
-	for (std::vector<std::string>::const_iterator it = allowedMethods.begin(); it != allowedMethods.end(); ++it) {
+bool Client::isMethodAllowed(const LocationConfig& location,
+	const std::string& method) const {
+	const std::vector<std::string> allowedMethods = location.getAllowedMethods();
+	for (std::vector<std::string>::const_iterator it = allowedMethods.begin();
+		it != allowedMethods.end(); ++it) {
 		if (*it == method) {
-			isAllowed = true;
-			break;
+			return true;
 		}
 	}
+	return false;
+}
 
-	if (!isAllowed) {
-		_response.setStatusCode(405);
-		buildErrorResponse(405); // !!! added 405 method not allowed
+bool Client::handleRedirect(const LocationConfig& location) {
+	const std::pair<int, std::string> redirect = location.getRedirect();
+	if (redirect.first == 0 || redirect.second == "") {
+		return false;
+	}
+
+	if (redirect.first >= 300 && redirect.first < 400) {
+		_response.setStatusCode(redirect.first); // check if it starts with 3?
+		_response.setHeader("Location", redirect.second);
 		finalizeResponse();
-		return;
+		return true;
 	}
 
-	const std::pair<int, std::string> redirect = matchedLocation->getRedirect();
-	if (redirect.first != 0 && redirect.second != "") {
-		if (redirect.first >= 300 && redirect.first < 400) {
-			_response.setStatusCode(redirect.first); // check if it starts with 3?
-			_response.setHeader("Location", redirect.second);
-			finalizeResponse();
-			return;
-		} else {
-			buildErrorResponse(500);
-			return;
-		}
-	}
+	buildErrorResponse(500);
+	return true;
+}
 
-	const std::map<std::string, std::string> cgiHandlers = matchedLocation->getCgiHandlers();
-	for (std::map<std::string, std::string>::const_iterator iter = cgiHandlers.begin(); iter != cgiHandlers.end(); ++iter) {
-		const std::string& ext = iter->first;
-
-		if (uri.length() >= ext.length()
-			&& uri.compare(uri.length() - ext.length(), ext.length(), ext) == 0) {
-			cgiFlag = true;
+bool Client::tryCgiHandler(const LocationConfig& location,
+	const std::string& uri) {
+	const std::map<std::string, std::string> cgiHandlers = location.getCgiHandlers();
+	for (std::map<std::string, std::string>::const_iterator iter = cgiHandlers.begin();
+		iter != cgiHandlers.end(); ++iter) {
+		const std::string& extension = iter->first;
+		if (uri.length() >= extension.length()
+			&& uri.compare(uri.length() - extension.length(), extension.length(), extension) == 0) {
 			// exeAssigns new contents to the vector, replacing its current contents, and modifying its size accordingly.
 			char* const argv[] = {NULL};
 			char* const envp[] = {NULL};
 			execve(iter->second.c_str(), argv, envp); // TO DO fork() ...
-			break;
+			return true;
 		}
 	}
+	return false;
+}
+
+bool Client::dispatchMethod(const LocationConfig& location,
+	const std::string& method, const std::string& fullPath,
+	const std::string& uri) {
+	if (method == "GET") {
+		return handleGet(location, fullPath, uri) != 0;
+	}
+
+	if (method == "POST") {
+		if (location.getUploadStore() != "") {
+			return handlePost(location, uri) != 0;
+		}
+		buildErrorResponse(403); // forbidden
+		return false;
+	}
+
+	if (method == "DELETE") {
+		return handleDelete(fullPath) != 0;
+	}
+	return true;
+}
+
+bool Client::validateLocation(const LocationConfig* location) {
+	if (location != NULL) {
+		return true;
+	}
+
+	_response.setStatusCode(404);
+	buildErrorResponse(404); // !!! added 404 not found
+	finalizeResponse();
+	return false;
+}
+
+bool Client::validateMethod(const LocationConfig& location,
+	const std::string& method) {
+	if (isMethodAllowed(location, method)) {
+		return true;
+	}
+
+	_response.setStatusCode(405);
+	buildErrorResponse(405); // !!! added 405 method not allowed
+	finalizeResponse();
+	return false;
+}
+
+void Client::handleProcessing() {
+	std::string uri = _request.getUri();
+	const LocationConfig* matchedLocation = findMatchingLocation(uri);
+	bool cgiFlag = false;
+	if (!validateLocation(matchedLocation)) {
+		return;
+	}
+
+	std::string method = _request.getMethod();
+	if (!validateMethod(*matchedLocation, method)) {
+		return;
+	}
+
+	if (handleRedirect(*matchedLocation)) {
+		return;
+	}
+
+	cgiFlag = tryCgiHandler(*matchedLocation, uri);
 
 	std::string fullPath = _request.makeFullPath(*matchedLocation);
 
+	if (!cgiFlag && !dispatchMethod(*matchedLocation, method, fullPath, uri)) {
+		return;
+	}
 	if (!cgiFlag) {
-		if (method == "GET") {
-			if (!handleGet(*matchedLocation, fullPath, uri)) {
-				return;
-			}
-		} else if (method == "POST") {
-			if (matchedLocation->getUploadStore() != ""){
-				if (!handlePost(*matchedLocation, uri)) {
-					return;
-				}
-			} else {
-				buildErrorResponse(403); // forbidden
-				return;
-			}
-		} else if (method == "DELETE") {
-			if (!handleDelete(fullPath)) {
-				return;
-			}
-		}
 		finalizeResponse();
 	}
 }
@@ -813,53 +893,109 @@ void Client::handleWrite() {
 	}
 }
 
-void Client::parseHeaders() {
-	// 1. Find the end of the first line
-	size_t firstLineEnd = _readBuffer.find("\r\n");
-	if (firstLineEnd == std::string::npos) return; // Safety check
-
-	// Extract just the request line (excluding the \r\n)
-	std::string requestLine = _readBuffer.substr(0, firstLineEnd);
-
+bool Client::parseRequestLineParts(const std::string& requestLine,
+	std::string& method, std::string& uri, std::string& version) const {
 	// 2. Parse the request line safely using a string stream
 	// This automatically handles spaces and prevents out-of-bounds crashes
-	std::istringstream iss(requestLine);
-	std::string method, uri, version; // check in the 42 rules if this multiple declaration is ok
-
-	if (!(iss >> method >> uri >> version)) {
-		_response.setStatusCode(400); // Bad Request
-		finalizeResponse();
-		return;
+	std::istringstream stream(requestLine);
+	// check in the 42 rules if this multiple declaration is ok
+	if (!(stream >> method >> uri >> version)) {
+		return false;
 	}
 
 	std::string extra;
-	if (iss >> extra) {
-		_response.setStatusCode(400);
-		finalizeResponse();
-		return;
+	if (stream >> extra) {
+		return false;
 	}
-	
+	return true;
+}
+
+bool Client::applyRequestLine(const std::string& method,
+	const std::string& uri, const std::string& version) {
 	_request.setMethod(method);
 	_request.setUri(uri);
 
 	if (version == "HTTP/1.0" || version == "HTTP/1.1") {
 		_request.setVersion(version);
 		_response.setVersion(version);
-	}
-	else {
+	} else {
 		_response.setStatusCode(505); // HTTP version not supported
 		_request.setRequestState(HttpRequest::PARSE_ERROR);
 		finalizeResponse();
-		return;
+		return false;
 	}
 
 	if (_request.getRequestState() == HttpRequest::PARSE_ERROR) {
 		_response.setStatusCode(_request.getErrorCode());
 		finalizeResponse();
-		return;
+		return false;
 	}
 
 	_request.setRequestState(HttpRequest::PARSE_HEADERS);
+	return true;
+}
+
+bool Client::parseRequestLine(size_t& firstLineEnd) {
+	// 1. Find the end of the first line
+	firstLineEnd = _readBuffer.find("\r\n");
+	if (firstLineEnd == std::string::npos) return false; // Safety check
+
+	// Extract just the request line (excluding the \r\n)
+	std::string requestLine = _readBuffer.substr(0, firstLineEnd);
+	std::string method;
+	std::string uri;
+	std::string version;
+	if (!parseRequestLineParts(requestLine, method, uri, version)) {
+		_response.setStatusCode(400); // Bad Request
+		finalizeResponse();
+		return false;
+	}
+
+	return applyRequestLine(method, uri, version);
+}
+
+static void trimHeaderValue(std::string& value) {
+	// Trim leading and trailing spaces from the value
+	size_t valueStart = value.find_first_not_of(" \t");
+	if (valueStart == std::string::npos) {
+		value.clear();
+		return;
+	}
+
+	size_t valueEnd = value.find_last_not_of(" \t");
+	value = value.substr(valueStart, valueEnd - valueStart + 1);
+}
+
+bool Client::storeParsedHeader(const std::string& key,
+	const std::string& value) {
+	_request.addHeader(key, value);
+	if (_request.getRequestState() == HttpRequest::PARSE_ERROR) {
+		_response.setStatusCode(_request.getErrorCode());
+		finalizeResponse();
+		return false;
+	}
+	return true;
+}
+
+bool Client::parseHeaderLine(const std::string& line) {
+	// Find the colon in this specific line
+	size_t colonPos = line.find(':');
+	if (colonPos == std::string::npos) {
+		return true;
+	}
+
+	std::string key = line.substr(0, colonPos);
+	std::string value = line.substr(colonPos + 1);
+	trimHeaderValue(value);
+
+	return storeParsedHeader(key, value);
+}
+
+void Client::parseHeaders() {
+	size_t firstLineEnd;
+	if (!parseRequestLine(firstLineEnd)) {
+		return;
+	}
 
 	// 3. Parse the headers line by line
 	size_t lineStart = firstLineEnd + 2;
@@ -873,32 +1009,8 @@ void Client::parseHeaders() {
 		// Extract the single line
 		std::string line = _readBuffer.substr(lineStart, lineEnd - lineStart);
 
-		// Find the colon in this specific line
-		size_t colonPos = line.find(':');
-		if (colonPos != std::string::npos) {
-			std::string key = line.substr(0, colonPos);
-			std::string value = line.substr(colonPos + 1);
-
-			// Trim leading spaces from the value (e.g., " localhost" -> "localhost")
-			size_t valueStart = value.find_first_not_of(" \t");
-			if (valueStart != std::string::npos) {
-				size_t valueEnd = value.find_last_not_of(" \t");
-				value = value.substr(valueStart, valueEnd - valueStart + 1);
-			} else {
-				value.clear();
-			}
-
-			if (key == "Content-Length") {
-
-			}
-
-			_request.addHeader(key, value);
-
-			if (_request.getRequestState() == HttpRequest::PARSE_ERROR) {
-				_response.setStatusCode(_request.getErrorCode());
-				finalizeResponse();
-				return;
-			}
+		if (!parseHeaderLine(line)) {
+			return;
 		}
 
 		// Move to the next line
