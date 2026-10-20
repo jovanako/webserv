@@ -62,36 +62,176 @@ void Client::setVirtualHosts(const std::vector<ServerConfig>& hosts) {
 	_virtualHosts = hosts;
 }
 
-static std::string getMimeType(const std::string& path);
+static std::string getFileExtension(const std::string& path) {
+	// find the last dot and the last slash
+	size_t dotPos = path.find_last_of('.');
+	size_t slashPos = path.find_last_of('/');
 
-void Client::handleReadHeader() {
-	size_t headerEnd = _readBuffer.find("\r\n\r\n");
-	if (headerEnd == std::string::npos) {
-		char buf[BUFFER_SIZE];
-		ssize_t bytesRead = recv(_socketFd, buf, sizeof(buf), 0);
+	// if there is no dot or the dot is part of a folder name
+	if (dotPos == std::string::npos || (slashPos != std::string::npos && dotPos < slashPos)) {
+		return "";
+	}
 
-		if (bytesRead < 0) {
-			// if there's simply no data right now, don't close the connection
+	// extract the extension
+	return path.substr(dotPos);
+}
+
+static std::string lowercaseExtension(const std::string& extension) {
+	std::string lowerExtension = extension;
+	for (size_t i = 0; i < lowerExtension.length(); ++i) {
+		lowerExtension[i] = static_cast<char>(std::tolower(
+			static_cast<unsigned char>(lowerExtension[i])));
+	}
+	return lowerExtension;
+}
+
+static std::string mimeTypeForExtension(const std::string& extension) {
+	// Map common extensions
+	if (extension == ".html" || extension == ".htm") return "text/html";
+	if (extension == ".css") return "text/css";
+	if (extension == ".js") return "application/javascript";
+	if (extension == ".json") return "application/json";
+	if (extension == ".png") return "image/png";
+	if (extension == ".jpg" || extension == ".jpeg") return "image/jpeg";
+	if (extension == ".gif") return "image/gif";
+	if (extension == ".ico") return "image/x-icon";
+	if (extension == ".txt") return "text/plain";
+	if (extension == ".pdf") return "application/pdf";
+
+	// fallback for anything else
+	return "application/octet-stream";
+}
+
+static std::string getMimeType(const std::string& path) {
+	std::string ext = getFileExtension(path);
+	if (ext.empty()) {
+		return "application/octet-stream";
+	}
+
+	// convert extension to lowercase to handle ".PNG" or ".Html" safely
+	ext = lowercaseExtension(ext);
+	return mimeTypeForExtension(ext);
+}
+
+bool Client::findHeaderEnd(size_t& headerEnd) const {
+	headerEnd = _readBuffer.find("\r\n\r\n");
+	return headerEnd != std::string::npos;
+}
+
+bool Client::readHeaderChunk() {
+	char buf[BUFFER_SIZE];
+	ssize_t bytesRead = recv(_socketFd, buf, sizeof(buf), 0);
+	if (bytesRead < 0) {
+		// if there's simply no data right now, don't close the connection
 		// just return and let poll() wait for the next event
 		if (errno == EAGAIN || errno == EWOULDBLOCK) {
-			return;
+			return false;
 		}
 
 		// for actual network errors (e.g., ECONNRESET), mark as done to trigger cleanup
 		std::cerr << "Read error on fd " << _socketFd << " (errno: " << errno << ")\n";
 		_clientState = DONE;
-		return;
+		return false;
 	} else if (bytesRead == 0) {
 		std::cout << "Client disconnected on fd " << _socketFd << "\n";
 		_clientState = DONE;
-		return;
+		return false;
 	}
 
-		_readBuffer.append(buf, bytesRead);
-		headerEnd = _readBuffer.find("\r\n\r\n");
+	_readBuffer.append(buf, bytesRead);
+	return true;
+}
+
+bool Client::receiveHeaderData(size_t& headerEnd) {
+	if (findHeaderEnd(headerEnd)) {
+		return true;
 	}
 
-	if (headerEnd != std::string::npos) {
+	if (!readHeaderChunk()) {
+		return false;
+	}
+	return findHeaderEnd(headerEnd);
+}
+
+bool Client::getHostHeaderValue(std::string& hostValue) {
+	if (_request.getVersion() != "HTTP/1.1") {
+		return true;
+	}
+
+	const std::map<std::string, std::string>& headers = _request.getHeaders();
+	std::map<std::string, std::string>::const_iterator it = headers.find("host");
+	if (it == headers.end()) {
+		_response.setStatusCode(400); // 400 Bad Request strictly required for HTTP/1.1
+		finalizeResponse();
+		return false;
+	}
+
+	hostValue = it->second;
+	return true;
+}
+
+std::string Client::extractHostName(const std::string& hostValue) const {
+	// checking if we got the right server block (in case we are listening on the same port more than once)
+	size_t colonPos = hostValue.find(':');
+	if (colonPos != std::string::npos) {
+		return hostValue.substr(0, colonPos);
+	}
+	return hostValue;
+}
+
+void Client::applyVirtualHostSelection(const std::string& hostName) {
+	for (size_t i = 0; i < _virtualHosts.size(); ++i) {
+		if (_virtualHosts[i].getPort() == _server.getPort()) {
+			const std::vector<std::string>& serverNames = _virtualHosts[i].getServerNames();
+			bool matchFound = false;
+
+			for (size_t j = 0; j < serverNames.size(); ++j) {
+				if (serverNames[j] == hostName) {
+					_server = _virtualHosts[i];
+					matchFound = true;
+					break;
+				}
+			}
+			if (matchFound) {
+				break;
+			}
+		}
+	}
+}
+
+bool Client::selectVirtualHost() {
+	std::string hostValue = "";
+	if (!getHostHeaderValue(hostValue)) {
+		return false;
+	}
+
+	std::string hostName = extractHostName(hostValue);
+	applyVirtualHostSelection(hostName);
+	return true;
+}
+
+void Client::prepareRequestBody(size_t headerEnd) {
+	// Only keep leftover bytes that belong to the body by deleting the header
+	_readBuffer.erase(0, headerEnd + 4);
+
+	// If there is a body, handle it
+	if (_request.getContentLength() > 0 || _request.isChunked()) {
+		_clientState = READING_BODY;
+
+		// If we have already read part of the body
+		if (!_readBuffer.empty()) {
+			handleReadBody();
+		}
+	}
+	// Otherwise, if there is no body
+	else {
+		_clientState = PROCESSING;
+	}
+}
+
+void Client::handleReadHeader() {
+	size_t headerEnd;
+	if (receiveHeaderData(headerEnd)) {
 		// change state?
 		parseHeaders();
 		if (_clientState == WRITING_RESPONSE) {
@@ -105,119 +245,62 @@ void Client::handleReadHeader() {
 			return;
 		}
 
-		bool hasHost = false;
-		std::string hostValue = "";
-
-		if (_request.getVersion() == "HTTP/1.1") {
-			std::map<std::string, std::string> headers = _request.getHeaders();
-			std::map<std::string, std::string>::const_iterator it = headers.find("host");
-
-			if (it != headers.end()) {
-				hasHost = true;
-				hostValue = it->second;
-			}
-
-			if (!hasHost) {
-				_response.setStatusCode(400); // 400 Bad Request strictly required for HTTP/1.1
-				finalizeResponse();
-				return;
-			}
-		}
-
-		// checking if we got the right server block (in case we are listening on the same port more than once)
-		size_t colonPos = hostValue.find(':');
-		std::string hostName;
-		if (colonPos != std::string::npos) {
-			hostName = hostValue.substr(0, colonPos);
-		} else {
-			hostName = hostValue;
-		}
-
-		for (size_t i = 0; i < _virtualHosts.size(); ++i) {
-			if (_virtualHosts[i].getPort() == _server.getPort()) {
-				const std::vector<std::string>& serverNames = _virtualHosts[i].getServerNames();
-				bool matchFound = false;
-
-				for (size_t j = 0; j < serverNames.size(); ++j) {
-					if (serverNames[j] == hostName) {
-						_server = _virtualHosts[i];
-						matchFound = true;
-						break;
-					}
-				}
-				if (matchFound) {
-					break;
-				}
-			}
-		}
-
-		// Only keep leftover bytes that belong to the body by deleting the header
-		_readBuffer.erase(0, headerEnd + 4);
-
-		// If there is a body, handle it
-		if (_request.getContentLength() > 0 || _request.isChunked()) {
-			_clientState = READING_BODY;
-			
-			// If we have already read part of the body
-			if (!_readBuffer.empty()) {
-				handleReadBody();
-			}
-		}
-		// Otherwise, if there is no body
-		else {
-			_clientState = PROCESSING;
-		}
-	}
-}
-
-void Client::parseChunkedBody() {
-	while (true) {
-		// find the end of the chunk size line
-		size_t pos = _readBuffer.find("\r\n");
-		if (pos == std::string::npos) {
-			return; // wait for more data to arrive
-		}
-
-		// extract chunk size (and ignore potential chunk extensions starting with ';')
-		std::string hexSize = _readBuffer.substr(0, pos);
-		size_t semiPos = hexSize.find(';');
-		if (semiPos != std::string::npos) {
-			hexSize = hexSize.substr(0, semiPos);
-		}
-
-		//convert hex string to integer
-		std::stringstream ss;
-		ss << std::hex << hexSize;
-		size_t chunkSize;
-		if (!(ss >> chunkSize)) {
-			buildErrorResponse(400); // bad request
+		if (!selectVirtualHost()) {
 			return;
 		}
 
-		// a chunk size of 0 indicates the end of the request body
-		if (chunkSize == 0) {
-			// check if the final "\r\n\r\n" is completely in the buffer
-			if (_readBuffer.length() >= pos + 4 && _readBuffer.substr(pos, 4) == "\r\n\r\n") {
-				_readBuffer.erase(0, pos + 4);
-				_clientState = PROCESSING;
-			}
-			return; // wait for final "\r\n" if not fully received yet
-		}
-
-		// check if the entire chunk data + trailing "\r\n" has been received
-		if (_readBuffer.length() < pos + 2 + chunkSize + 2) {
-			return; // wait for the rest of the chunk
-		}
-
-		// append the chunk data to the request
-		_request.appendBody(_readBuffer.data() + pos + 2, chunkSize);
-
-		// erase the processed chunk size, chunk data, and both \r\n from the buffer
-		_readBuffer.erase(0, pos + 2 + chunkSize + 2);
+		prepareRequestBody(headerEnd);
 	}
 }
 
-void Client::handleReadBody() {
+bool Client::readChunkSize(size_t& lineEnd, size_t& chunkSize) {
+	// find the end of the chunk size line
+	lineEnd = _readBuffer.find("\r\n");
+	if (lineEnd == std::string::npos) {
+		return false; // wait for more data to arrive
+	}
+
+	// extract chunk size (and ignore potential chunk extensions starting with ';')
+	std::string hexSize = _readBuffer.substr(0, lineEnd);
+	size_t semiPos = hexSize.find(';');
+	if (semiPos != std::string::npos) {
+		hexSize = hexSize.substr(0, semiPos);
+	}
+
+	// convert chunk size to integer
+	std::stringstream stream;
+	stream << std::hex << hexSize;
+	if (!(stream >> chunkSize)) {
+		buildErrorResponse(400); // bad request
+		return false;
+	}
+	return true;
+}
+
+void Client::finishChunkedBody(size_t chunkLineEnd) {
+	// check if the final "\r\n\r\n" is completely in the buffer
+	if (_readBuffer.length() >= chunkLineEnd + 4 &&
+		_readBuffer.substr(chunkLineEnd, 4) == "\r\n\r\n") {
+		_readBuffer.erase(0, chunkLineEnd + 4);
+		_clientState = PROCESSING;
+	}
+}
+
+bool Client::appendChunkData(size_t chunkLineEnd, size_t chunkSize) {
+	// check if the entire chunk data + trailing "\r\n" has been received
+	if (_readBuffer.length() < chunkLineEnd + 2 + chunkSize + 2) {
+		return false; // wait for the rest of the chunk
+	}
+
+	// append the chunk data to the request
+	_request.appendBody(_readBuffer.data() + chunkLineEnd + 2, chunkSize);
+
+	// erase the processed chunk size, chunk data, and both \r\n from the buffer
+	_readBuffer.erase(0, chunkLineEnd + 2 + chunkSize + 2);
+	return true;
+}
+
+bool Client::readBodyChunk() {
 	char buf[BUFFER_SIZE];
 	ssize_t bytesRead = recv(_socketFd, buf, sizeof(buf), 0);
 		
@@ -225,73 +308,118 @@ void Client::handleReadBody() {
 		// if there's simply no data right now, don't close the connection
 		// just return and let poll() wait for the next event
 		if (errno == EAGAIN || errno == EWOULDBLOCK) {
-			return;
+			return false;
 		}
 		// for actual network errors (e.g., ECONNRESET), mark as done to trigger cleanup
 		std::cerr << "Read error on fd " << _socketFd << " (errno: " << errno << ")\n";
 		_clientState = DONE;
-		return;
+		return false;
 	} else if (bytesRead == 0) {
 		std::cout << "Client disconnected on fd " << _socketFd << "\n";
 		_clientState = DONE;
-		return;
+		return false;
 	}
 
 	_readBuffer.append(buf, bytesRead);
+	return true;
+}
+
+void Client::parseChunkedBody() {
+	while (true) {
+		size_t pos;
+		size_t chunkSize;
+		if (!readChunkSize(pos, chunkSize)) {
+			return;
+		}
+
+		// a chunk size of 0 indicates the end of the request body
+		if (chunkSize == 0) {
+			finishChunkedBody(pos);
+			return; // wait for final "\r\n" if not fully received yet
+		}
+
+		if (!appendChunkData(pos, chunkSize)) {
+			return;
+		}
+	}
+}
+
+void Client::processFixedLengthBody() {
+	size_t contentLen = _request.getContentLength();
+
+	if (_readBuffer.length() > _server.getClientMaxBodySize()) {
+		buildErrorResponse(413); // pazload too large
+		return;
+	}
+
+	if (_readBuffer.length() >= contentLen) {
+		_request.appendBody(_readBuffer.data(), contentLen);
+		_readBuffer.erase(0, contentLen);
+		_clientState = PROCESSING;
+	}
+}
+
+void Client::handleReadBody() {
+	if (!readBodyChunk()) {
+		return;
+	}
 
 	if (_request.isChunked()) {
 		parseChunkedBody();
 	} else {
-		size_t contentLen = _request.getContentLength();
-
-		if (_readBuffer.length() > _server.getClientMaxBodySize()) {
-			buildErrorResponse(413); // pazload too large
-			return;
-		}
-
-		if (_readBuffer.length() >= contentLen) {
-			_request.appendBody(_readBuffer.data(), contentLen);
-			_readBuffer.erase(0, contentLen);
-			_clientState = PROCESSING;
-		}
+		processFixedLengthBody();
 	}
+}
+
+bool Client::loadCustomErrorPage(int statusCode, std::string& body,
+	std::string& mimeType) const {
+	const std::map<int, std::string>& errorPages = _server.getErrorPages();
+	std::map<int, std::string>::const_iterator it = errorPages.find(statusCode);
+	if (it == errorPages.end()) {
+		return false;
+	}
+
+	std::string filePath = it->second;
+	// prepend root or server path if needed
+	std::ifstream file(filePath.c_str(), std::ios::in | std::ios::binary);
+	if (!file.is_open()) {
+		return false;
+	}
+
+	std::ostringstream stream;
+	stream << file.rdbuf();
+	body = stream.str();
+	mimeType = getMimeType(filePath);
+	return true;
+}
+
+std::string Client::createDefaultErrorPage(int statusCode) const {
+	std::ostringstream stream;
+	stream << "<!DOCTYPE html><html><head><title>" << statusCode << " "
+		<< _response.getStatusMessage(statusCode)
+		<< "</title></head><body><center><h1>" << statusCode << " "
+		<< _response.getStatusMessage(statusCode)
+		<< "</h1></center><hr><center>webserv</center></body></html>";
+	return stream.str();
+}
+
+void Client::applyErrorResponseBody(const std::string& body,
+	const std::string& mimeType) {
+	_response.setHeader("Content-Type", mimeType);
+	_response.setBody(body);
+	finalizeResponse();
 }
 
 void Client::buildErrorResponse(int statusCode) {
 	_response.setStatusCode(statusCode);
 
 	std::string body;
-	bool loadedFromFile = false;
 	std::string mimeType = "text/html";
-
-	const std::map<int, std::string>& errorPages = _server.getErrorPages();
-	std::map<int, std::string>::const_iterator it = errorPages.find(statusCode);
-
-	if (it != errorPages.end()) {
-		std::string filePath = it->second;
-		// prepend root or server path if needed
-		std::ifstream file(filePath.c_str(), std::ios::in | std::ios::binary);
-		if (file.is_open()) {
-			std::ostringstream ss;
-			ss << file.rdbuf();
-			body = ss.str();
-			loadedFromFile = true;
-			mimeType = getMimeType(filePath);
-		}
-	}
-	if (!loadedFromFile) {
-        std::ostringstream ss;
-        ss << "<!DOCTYPE html><html><head><title>" << statusCode << " " 
-           << _response.getStatusMessage(statusCode)
-           << "</title></head><body><center><h1>" << statusCode << " " 
-           << _response.getStatusMessage(statusCode)
-           << "</h1></center><hr><center>webserv</center></body></html>";
-        body = ss.str();
+	if (!loadCustomErrorPage(statusCode, body, mimeType)) {
+		body = createDefaultErrorPage(statusCode);
     }
 
-	_response.setHeader("Content-Type", mimeType);
-	_response.setBody(body);
-	finalizeResponse();
+	applyErrorResponseBody(body, mimeType);
 }
 
 void Client::finalizeResponse() {
@@ -316,77 +444,56 @@ void Client::resetForNextRequest() {
 	_clientState = READING_HEADER;
 }
 
+static std::string autoindexBaseUri(const std::string& requestUri) {
+	std::string baseUri = requestUri;
+	if (!baseUri.empty() && baseUri[baseUri.length() - 1] != '/') {
+		baseUri += "/";
+	}
+	return baseUri;
+}
+
+static void appendAutoindexHeader(std::ostringstream& html,
+	const std::string& requestUri) {
+	// skeleton of HTML
+	html << "<!DOCTYPE html>\n"
+		 << "<html>\n<head>\n"
+		 << "<title>Index of " << requestUri << "</title>\n"
+		 << "</head>\n<body>\n"
+		 << "<h1>Index of " << requestUri << "</h1>\n"
+		 << "<hr>\n<pre>\n";
+}
+
+static void appendAutoindexEntries(std::ostringstream& html, DIR* dir,
+	const std::string& baseUri) {
+	struct dirent* entry = readdir(dir);
+	while (entry != NULL) {
+		std::string filename = entry->d_name;
+		// absolute path
+		std::string href = baseUri + filename;
+		// make it a link
+		html << "<a href=\"" << href << "\">" << filename << "</a>\n";
+		entry = readdir(dir);
+	}
+}
+
+static void appendAutoindexFooter(std::ostringstream& html) {
+	html << "</pre>\n<hr>\n</body>\n</html>";
+}
+
 std::string generateAutoindex(const std::string& fullPath, const std::string& requestUri) {
 	DIR* dir = opendir(fullPath.c_str());
 	if(dir == NULL) {
 		return (""); //this will be a 403
 	}
 
-	//skeleton of HTML
 	std::ostringstream html;
-	html << "<!DOCTYPE html>\n"
-         << "<html>\n<head>\n"
-		 << "<title>Index of " << requestUri << "</title>\n"
-		 << "</head>\n<body>\n"
-         << "<h1>Index of " << requestUri << "</h1>\n"
-		 << "<hr>\n<pre>\n";
-		 
-	//might change baseUri soo cant use requestURI - Ensuring trailing slash 
-	std::string baseUri = requestUri;
-	if(!baseUri.empty() && baseUri[baseUri.length() - 1] != '/') {
-		baseUri += "/";
-	}
-
-	struct dirent* entry;
-	entry = readdir(dir);
-	while(entry != NULL)
-	{
-		std::string filename = entry->d_name;
-		//absolute path
-		std::string href = baseUri + filename;
-		//make it a link
-		html << "<a href=\"" << href << "\">" << filename << "</a>\n";
-		entry = readdir(dir);
-	}
+	appendAutoindexHeader(html, requestUri);
+	std::string baseUri = autoindexBaseUri(requestUri);
+	appendAutoindexEntries(html, dir, baseUri);
 	closedir(dir);
-	html << "</pre>\n<hr>\n</body>\n</html>";
+	appendAutoindexFooter(html);
 
 	return html.str();
-}
-
-static std::string getMimeType(const std::string& path) {
-	// find the last dot and the last slash
-	size_t dotPos = path.find_last_of('.');
-	size_t slashPos = path.find_last_of('/');
-
-	// if there is no dot or the dot is part of a folder name
-	if (dotPos == std::string::npos || (slashPos != std::string::npos && dotPos <slashPos)) {
-		return "application/octet-stream";
-	}
-
-	// extract the extension
-	std::string ext = path.substr(dotPos);
-
-	// convert extension to lowercase to handle ".PNG" or ".Html" safely
-	for (size_t i = 0; i < ext.length(); ++i) {
-		ext[i] =static_cast<char>(std::tolower(static_cast<unsigned char>(ext[i])));
-	}
-
-	// Map common extensions
-    if (ext == ".html" || ext == ".htm") return "text/html";
-    if (ext == ".css") return "text/css";
-    if (ext == ".js") return "application/javascript";
-    if (ext == ".json") return "application/json";
-    if (ext == ".png") return "image/png";
-    if (ext == ".jpg" || ext == ".jpeg") return "image/jpeg";
-    if (ext == ".gif") return "image/gif";
-    if (ext == ".ico") return "image/x-icon";
-    if (ext == ".txt") return "text/plain";
-    if (ext == ".pdf") return "application/pdf";
-
-	// fallback for anything else
-	return "application/octet-stream";
-
 }
 
 int Client::handleGet(const LocationConfig& matchedLocation, std::string fullPath, const std::string uri) {

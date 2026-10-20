@@ -38,7 +38,22 @@ class Client {
 		// ... buffers, timers, etc.
 
 		void		handleReadHeader();
+		bool		findHeaderEnd(size_t& headerEnd) const;
+		bool		readHeaderChunk();
+		bool		receiveHeaderData(size_t& headerEnd);
+		bool		getHostHeaderValue(std::string& hostValue);
+		std::string	extractHostName(const std::string& hostValue) const;
+		void		applyVirtualHostSelection(const std::string& hostName);
+		bool		selectVirtualHost();
+		void		prepareRequestBody(size_t headerEnd);
+		bool		readBodyChunk();
+		void		processFixedLengthBody();
 		void		handleReadBody();
+		bool		loadCustomErrorPage(int statusCode, std::string& body,
+			std::string& mimeType) const;
+		std::string	createDefaultErrorPage(int statusCode) const;
+		void		applyErrorResponseBody(const std::string& body,
+			const std::string& mimeType);
 		void		handleWriteResponse();
 		void		handleCgiPipeWait();
 		bool		shouldKeepAlive() const;
@@ -63,6 +78,9 @@ class Client {
 		
 		void parseHeaders();
 		void parseChunkedBody();
+		bool readChunkSize(size_t& lineEnd, size_t& chunkSize);
+		void finishChunkedBody(size_t chunkLineEnd);
+		bool appendChunkData(size_t chunkLineEnd, size_t chunkSize);
 		void buildErrorResponse(int statusCode);
 		
 		ConnectionState						getClientState() const;
