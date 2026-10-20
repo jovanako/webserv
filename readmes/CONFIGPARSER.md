@@ -88,3 +88,143 @@ What happens:
 2. You subtract `1` (which is what casting `-1` to an unsigned type effectively does).
 
 3. Because the variable can't go below zero, it rolls backward past zero and lands on the absolute highest number that variable's memory can physically hold.
+
+# Current `ConfigParser` Function Map
+
+This section describes the current implementation and the responsibility of each parser function.
+
+## Object lifecycle
+
+### Constructors, assignment, and destructor
+
+The constructors initialize the configuration path and token index. The copy constructor and assignment operator copy the path, token list, current token position, and parsed server list. The destructor releases the parser object; its standard containers clean up their own storage.
+
+## Tokenization
+
+### `tokenize()`
+
+Opens the configured file and processes it line by line. Each line is passed through comment removal, punctuation isolation, and token collection before its tokens are appended to `_tokens`.
+
+### `removeComment(std::string&)`
+
+Finds the first `#` and removes it and everything after it. Configuration comments therefore never reach the parser.
+
+### `isolatePunctuation(std::string&)`
+
+Adds spaces around `{`, `}`, and `;` so these syntax characters become independent tokens even when attached to another word.
+
+### `appendLineTokens(const std::string&)`
+
+Uses an input string stream to split a processed line on whitespace and append each word to `_tokens`.
+
+### `getNextToken()`
+
+Returns the next token and advances `_currentTokenIndex`. It throws when the parser reaches the end of the token list unexpectedly.
+
+## Server parsing
+
+### `parse()`
+
+Starts tokenization, resets the token index, and requires the top-level input to contain one or more `server` blocks. It returns the completed server configurations and rejects an empty configuration.
+
+### `parseServerBlock()`
+
+Creates one `ServerConfig`, verifies its opening `{`, repeatedly dispatches directives, verifies the closing `}`, and stores the completed server.
+
+### `parseServerDirective(ServerConfig&, directive)`
+
+Dispatches a server directive to `listen`, `server_name`, `client_max_body_size`, `error_page`, or `location` parsing. Unknown directives produce a configuration error.
+
+### `parseListenDirective(ServerConfig&)`
+
+Reads a listen token, obtains its host and port with `parseListenTarget()`, validates the port with `parseListenPort()`, stores the values in the server, and consumes the terminating semicolon.
+
+### `parseListenTarget(token, host, port)`
+
+Interprets the listen forms `port`, `host:port`, and host-only input. It defaults the host to `0.0.0.0` and an IP-only target's port to `80`.
+
+### `parseListenPort(const std::string&)`
+
+Requires a non-empty decimal port and checks that it is within `1` through `65535`.
+
+### `parseServerNames(ServerConfig&)`
+
+Requires at least one server name, collects names until `;`, adds them to the server, and consumes the terminator.
+
+### `parseClientMaxBodySize(ServerConfig&)`
+
+Reads a size value, parses it with `parseSize()`, stores the result in the server, and verifies `;`.
+
+## Error pages
+
+### `parseErrorPage(ServerConfig&)`
+
+Collects the directive arguments, identifies the final argument as the error-page path, and registers all preceding status codes.
+
+### `getTokensUntilSemicolon()`
+
+Reads and returns tokens until it encounters `;`. It is used by directives with a variable number of arguments.
+
+### `getErrorPagePath(args)`
+
+Requires at least one status code and one path, then returns the final argument as the error-page path.
+
+### `addErrorPageCodes(ServerConfig&, args, errorPath)`
+
+Validates that every argument before the path contains only digits, converts each code, and maps it to the selected error page.
+
+## Location parsing
+
+### `parseLocationBlock(ServerConfig&)`
+
+Reads a location path, verifies the opening and closing braces, dispatches location directives, adds a default `index.html` when no index was provided, and stores the completed location in the server.
+
+### `parseLocationRoot(LocationConfig&)`
+
+Reads and stores the location root path, then verifies `;`.
+
+### `parseLocationIndex(LocationConfig&, indexPresent)`
+
+Requires at least one index file, collects all index names until `;`, stores them, and marks that an explicit index was provided.
+
+### `parseLocationMethods(LocationConfig&)`
+
+Requires at least one method, accepts only `GET`, `POST`, and `DELETE`, stores the allowed methods, and verifies `;`.
+
+### `parseLocationAutoindex(LocationConfig&)`
+
+Accepts only `on` or `off`, updates the location's autoindex flag, and verifies `;`.
+
+### `parseLocationUploadStore(LocationConfig&)`
+
+Reads and stores the upload directory, then verifies `;`.
+
+### `parseLocationCgi(LocationConfig&)`
+
+Requires a CGI extension and executable path, stores the mapping, and verifies `;`.
+
+### `parseLocationReturn(LocationConfig&)`
+
+Validates the redirect status code, reads the redirect URL, stores the redirect configuration, and verifies `;`.
+
+## Shared parsing helpers
+
+### `verifyToken(expected)`
+
+Checks that the next token matches the expected syntax token, such as `{`, `}`, or `;`, then advances the token index. It throws a configuration error on mismatch or end of input.
+
+### `parseSize(sizeStr)`
+
+Coordinates size parsing: it extracts a unit, parses the numeric portion, checks multiplication overflow, and returns the final byte count.
+
+### `parseSizeUnit(sizeStr, numPart)`
+
+Recognizes optional `K`, `M`, and `G` suffixes, writes the numeric part to `numPart`, and returns the corresponding multiplier.
+
+### `parseSizeNumber(numPart, originalSize)`
+
+Parses the numeric portion with an input string stream and rejects trailing or invalid characters.
+
+### `multiplySizeValue(value, multiplier, originalSize)`
+
+Checks `value > maxSize / multiplier` before multiplying, preventing `size_t` overflow. It throws a configuration error when the result would be too large.
