@@ -21,10 +21,9 @@ Client& Client::operator=(const Client& other) {
 	{
 		_socketFd = other._socketFd;
 		_clientState = other._clientState;
-		_request = other._request;
+		_parser = other._parser;
 		_response = other._response;
 		_server = other._server;
-		_readBuffer = other._readBuffer;
 		_writeBuffer = other._writeBuffer;
 		_bytesSent = other._bytesSent;
 		_virtualHosts = other._virtualHosts;
@@ -113,10 +112,10 @@ static std::string getMimeType(const std::string& path) {
 	return mimeTypeForExtension(ext);
 }
 
-bool Client::findHeaderEnd(size_t& headerEnd) const {
+/*bool Client::findHeaderEnd(size_t& headerEnd) const {
 	headerEnd = _readBuffer.find("\r\n\r\n");
 	return headerEnd != std::string::npos;
-}
+}*/
 
 bool Client::readHeaderChunk() {
 	char buf[BUFFER_SIZE];
@@ -138,11 +137,11 @@ bool Client::readHeaderChunk() {
 		return false;
 	}
 
-	_readBuffer.append(buf, bytesRead);
+	_parser.appendData(buf, bytesRead);
 	return true;
 }
 
-bool Client::receiveHeaderData(size_t& headerEnd) {
+/*bool Client::receiveHeaderData(size_t& headerEnd) {
 	if (findHeaderEnd(headerEnd)) {
 		return true;
 	}
@@ -151,14 +150,14 @@ bool Client::receiveHeaderData(size_t& headerEnd) {
 		return false;
 	}
 	return findHeaderEnd(headerEnd);
-}
+}*/
 
 bool Client::getHostHeaderValue(std::string& hostValue) {
-	if (_request.getVersion() != "HTTP/1.1") {
+	if (_parser.getRequest().getVersion() != "HTTP/1.1") {
 		return true;
 	}
 
-	const std::map<std::string, std::string>& headers = _request.getHeaders();
+	const std::map<std::string, std::string>& headers = _parser.getRequest().getHeaders();
 	std::map<std::string, std::string>::const_iterator it = headers.find("host");
 	if (it == headers.end()) {
 		_response.setStatusCode(400); // 400 Bad Request strictly required for HTTP/1.1
@@ -212,14 +211,14 @@ bool Client::selectVirtualHost() {
 
 void Client::prepareRequestBody(size_t headerEnd) {
 	// Only keep leftover bytes that belong to the body by deleting the header
-	_readBuffer.erase(0, headerEnd + 4);
+	_parser.eraseBuffer(0, headerEnd + 4);
 
 	// If there is a body, handle it
-	if (_request.getContentLength() > 0 || _request.isChunked()) {
+	if (_parser.getRequest().getContentLength() > 0 || _parser.getRequest().isChunked()) {
 		_clientState = READING_BODY;
 
 		// If we have already read part of the body
-		if (!_readBuffer.empty()) {
+		if (!_parser.getReadBuffer().empty()) {
 			handleReadBody();
 		}
 	}
@@ -231,14 +230,25 @@ void Client::prepareRequestBody(size_t headerEnd) {
 
 void Client::handleReadHeader() {
 	size_t headerEnd;
-	if (receiveHeaderData(headerEnd)) {
+	//walk me through this later
+	if(!readHeaderChunk()) {
+		return;
+	}
+	if(_parser.hasHeaderEnd(headerEnd)) {
+		if(!_parser.parseHeaders(_response)) {
+			if (_response.getStatusCode() >= 400) {
+				finalizeResponse();
+			}
+			return;
+		}
+	/*if (receiveHeaderData(headerEnd)) {
 		// change state?
-		parseHeaders();
+		//parseHeaders();
 		if (_clientState == WRITING_RESPONSE) {
 			return; // exit immediately so the error response can be sent
 		}
-
-		if (_request.getContentLength() > _server.getClientMaxBodySize()) {
+*/
+		if (_parser.getRequest().getContentLength() > _server.getClientMaxBodySize()) {
 			_response.setStatusCode(413);
 			// 413 Payload too large error
 			finalizeResponse();
@@ -253,7 +263,7 @@ void Client::handleReadHeader() {
 	}
 }
 
-bool Client::readChunkSize(size_t& lineEnd, size_t& chunkSize) {
+/*bool Client::readChunkSize(size_t& lineEnd, size_t& chunkSize) {
 	// find the end of the chunk size line
 	lineEnd = _readBuffer.find("\r\n");
 	if (lineEnd == std::string::npos) {
@@ -298,7 +308,7 @@ bool Client::appendChunkData(size_t chunkLineEnd, size_t chunkSize) {
 	// erase the processed chunk size, chunk data, and both \r\n from the buffer
 	_readBuffer.erase(0, chunkLineEnd + 2 + chunkSize + 2);
 	return true;
-}
+}*/
 
 bool Client::readBodyChunk() {
 	char buf[BUFFER_SIZE];
@@ -320,11 +330,11 @@ bool Client::readBodyChunk() {
 		return false;
 	}
 
-	_readBuffer.append(buf, bytesRead);
+	_parser.appendData(buf, bytesRead);
 	return true;
 }
 
-void Client::parseChunkedBody() {
+/*void Client::parseChunkedBody() {
 	while (true) {
 		size_t pos;
 		size_t chunkSize;
@@ -357,17 +367,24 @@ void Client::processFixedLengthBody() {
 		_readBuffer.erase(0, contentLen);
 		_clientState = PROCESSING;
 	}
-}
+}*/
 
 void Client::handleReadBody() {
 	if (!readBodyChunk()) {
 		return;
 	}
 
-	if (_request.isChunked()) {
-		parseChunkedBody();
+	bool finishedParsing = false;
+	if (_parser.getRequest().isChunked()) {
+		finishedParsing = _parser.parseChunkedBody(_response);
 	} else {
-		processFixedLengthBody();
+		finishedParsing= _parser.processFixedLengthBody(_server, _response);
+	}
+
+	if(finishedParsing) {
+		_clientState = PROCESSING;
+	} else if (_response.getStatusCode() >= 400) {
+		finalizeResponse();
 	}
 }
 
@@ -437,7 +454,7 @@ void Client::finalizeResponse() {
 }
 
 void Client::resetForNextRequest() {
-	_request = HttpRequest();
+	_parser.reset();
 	_response = HttpResponse();
 	_writeBuffer.clear();
 	_bytesSent = 0;
@@ -629,7 +646,7 @@ std::string Client::buildUploadPath(const LocationConfig& matchedLocation,
 bool Client::writeUploadBody(std::ofstream& outFile,
 	const std::string& savePath) {
 	// use write() so that it writes binary data correctly
-	const std::vector<char>& body = _request.getBody();
+	const std::vector<char>& body = _parser.getRequest().getBody();
 	if (body.empty()) {
 		return true;
 	}
@@ -790,14 +807,14 @@ bool Client::validateMethod(const LocationConfig& location,
 }
 
 void Client::handleProcessing() {
-	std::string uri = _request.getUri();
+	std::string uri = _parser.getRequest().getUri();
 	const LocationConfig* matchedLocation = findMatchingLocation(uri);
 	bool cgiFlag = false;
 	if (!validateLocation(matchedLocation)) {
 		return;
 	}
 
-	std::string method = _request.getMethod();
+	std::string method = _parser.getRequest().getMethod();
 	if (!validateMethod(*matchedLocation, method)) {
 		return;
 	}
@@ -808,7 +825,7 @@ void Client::handleProcessing() {
 
 	cgiFlag = tryCgiHandler(*matchedLocation, uri);
 
-	std::string fullPath = _request.makeFullPath(*matchedLocation);
+	std::string fullPath = _parser.getRequest().makeFullPath(*matchedLocation);
 
 	if (!cgiFlag && !dispatchMethod(*matchedLocation, method, fullPath, uri)) {
 		return;
@@ -823,7 +840,7 @@ bool Client::shouldKeepAlive() const {
 		return false;
 	}
 
-	std::map<std::string, std::string> headers = _request.getHeaders();
+	std::map<std::string, std::string> headers = _parser.getRequest().getHeaders();
 	std::map<std::string, std::string>::const_iterator it = headers.find("connection");
 	std::string connVal = "";
 	if (it != headers.end()) {
@@ -834,9 +851,9 @@ bool Client::shouldKeepAlive() const {
 		connVal[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(connVal[i])));
 	}
 
-	if (_request.getVersion() == "HTTP/1.1") {
+	if (_parser.getRequest().getVersion() == "HTTP/1.1") {
 		return (connVal != "close");
-	} else if (_request.getVersion() == "HTTP/1.0") {
+	} else if (_parser.getRequest().getVersion() == "HTTP/1.0") {
 		return (connVal == "keep-alive");
 	}
 	return false;
@@ -862,9 +879,13 @@ void Client::handleWriteResponse() {
 		if (shouldKeepAlive()) {
 			resetForNextRequest(); // set state back to reading header and clears request/response
 
-			if (_readBuffer.find("\r\n\r\n") != std::string::npos) {
+			size_t dummy; //walk me through this
+			if (_parser.hasHeaderEnd(dummy)) {
 				handleReadHeader();
 			}
+			/*if (_readBuffer.find("\r\n\r\n") != std::string::npos) {
+				handleReadHeader();
+			}*/
 		} else {
 			setClientState(DONE);
 		}
@@ -893,7 +914,7 @@ void Client::handleWrite() {
 	}
 }
 
-bool Client::parseRequestLineParts(const std::string& requestLine,
+/*bool Client::parseRequestLineParts(const std::string& requestLine,
 	std::string& method, std::string& uri, std::string& version) const {
 	// 2. Parse the request line safely using a string stream
 	// This automatically handles spaces and prevents out-of-bounds crashes
@@ -1016,5 +1037,5 @@ void Client::parseHeaders() {
 		// Move to the next line
 		lineStart = lineEnd + 2;
 	}
-}
+}*/
 

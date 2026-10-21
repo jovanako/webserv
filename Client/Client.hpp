@@ -1,7 +1,7 @@
 #ifndef CLIENT_HPP
 #define CLIENT_HPP
 
-#include "HttpRequest.hpp"
+#include "RequestParser.hpp"
 #include "HttpResponse.hpp"
 #include "ServerConfig.hpp"
 #include <sys/socket.h>
@@ -28,27 +28,28 @@ class Client {
 		static const int			BUFFER_SIZE = 4096;
 		int                 		_socketFd;
 		ConnectionState     		_clientState;
-		HttpRequest         		_request;
+		RequestParser				_parser;
 		HttpResponse        		_response;
 		ServerConfig				_server;
-		std::string					_readBuffer;
+		//std::string					_readBuffer;
 		std::vector<char>			_writeBuffer;
 		size_t						_bytesSent;
 		std::vector<ServerConfig>	_virtualHosts;
 		// ... buffers, timers, etc.
 
 		void		handleReadHeader();
-		bool		findHeaderEnd(size_t& headerEnd) const;
+		//bool		findHeaderEnd(size_t& headerEnd) const;
 		bool		readHeaderChunk();
-		bool		receiveHeaderData(size_t& headerEnd);
+		//bool		receiveHeaderData(size_t& headerEnd);
 		bool		getHostHeaderValue(std::string& hostValue);
 		std::string	extractHostName(const std::string& hostValue) const;
 		void		applyVirtualHostSelection(const std::string& hostName);
 		bool		selectVirtualHost();
 		void		prepareRequestBody(size_t headerEnd);
 		bool		readBodyChunk();
-		void		processFixedLengthBody();
+		//?void		processFixedLengthBody();
 		void		handleReadBody();
+
 		bool		loadCustomErrorPage(int statusCode, std::string& body,
 			std::string& mimeType) const;
 		std::string	createDefaultErrorPage(int statusCode) const;
@@ -100,20 +101,7 @@ class Client {
 		void handleWrite();
 		void handleProcessing();
 		void handleDone();
-		bool parseRequestLineParts(const std::string& requestLine,
-			std::string& method, std::string& uri, std::string& version) const;
-		bool applyRequestLine(const std::string& method, const std::string& uri,
-			const std::string& version);
-		bool parseRequestLine(size_t& firstLineEnd);
-		bool storeParsedHeader(const std::string& key,
-			const std::string& value);
-		bool parseHeaderLine(const std::string& line);
-		
-		void parseHeaders();
-		void parseChunkedBody();
-		bool readChunkSize(size_t& lineEnd, size_t& chunkSize);
-		void finishChunkedBody(size_t chunkLineEnd);
-		bool appendChunkData(size_t chunkLineEnd, size_t chunkSize);
+
 		void buildErrorResponse(int statusCode);
 		
 		ConnectionState						getClientState() const;
