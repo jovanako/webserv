@@ -25,6 +25,8 @@ CgiRequest::CgiRequest(const LocationConfig& location, const HttpRequest& reques
 	addHeader(request, "content-length", "CONTENT_LENGTH");
 	addHeader(request, "content-type", "CONTENT_TYPE");
 
+	_envVars.push_back("GATEWAY_INTERFACE=CGI/1.1");
+
 	// _envVars.push_back("REMOTE_ADDR=" + );
 	// _envVars.push_back("REMOTE_HOST=" + );
 	_envVars.push_back("REQUEST_METHOD=" + request.getMethod());
@@ -58,6 +60,26 @@ CgiRequest& CgiRequest::operator=(const CgiRequest& other) {
 }
 
 CgiRequest::~CgiRequest() {}
+
+const std::string& CgiRequest::getExecutable() const {
+	return _executable;
+}
+
+const std::string& CgiRequest::getScriptPath() const {
+	return _scriptPath;
+}
+
+const std::string& CgiRequest::getWorkingDirectory() const {
+	return _workingDirectory;
+}
+
+const std::vector<std::string>& CgiRequest::getEnvVars() const {
+	return _envVars;
+}
+
+int CgiRequest::getBodyFileDescriptor() const {
+	return _bodyFileDescriptor;
+}
 
 void CgiRequest::addHeader(const HttpRequest& request, const std::string& headerKey, const std::string& envVarName) {
 	std::map<std::string, std::string> headers = request.getHeaders();

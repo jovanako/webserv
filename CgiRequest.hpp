@@ -25,6 +25,11 @@ class CgiRequest {
 		CgiRequest& operator=(const CgiRequest& other);
 		~CgiRequest();
 
+		const std::string&					getExecutable() const;
+		const std::string&					getScriptPath() const;
+		const std::string&					getWorkingDirectory() const;
+		const std::vector<std::string>&		getEnvVars() const;
+		int									getBodyFileDescriptor() const;
 };
 
 #endif
