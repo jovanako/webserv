@@ -7,7 +7,7 @@ CgiRequest::CgiRequest()
 	  _envVars(),
 	  _bodyFileDescriptor(-1) {}
 
-CgiRequest::CgiRequest(const LocationConfig& location, const HttpRequest& request) {
+CgiRequest::CgiRequest(const ServerConfig& server, const LocationConfig& location, const HttpRequest& request) {
 	size_t dotPos = request.getUri().find_last_of('.');
 	std::string extension = request.getUri().substr(dotPos);
 
@@ -50,8 +50,8 @@ CgiRequest::CgiRequest(const LocationConfig& location, const HttpRequest& reques
 	
 	// _envVars.push_back("SCRIPT_NAME" +);
 
-	// _envVars.push_back("SERVER_NAME=" + );
-	// _envVars.push_back("SERVER_PORT=" + );
+	_envVars.push_back("SERVER_NAME=" + resolveServerName(server, request));
+	_envVars.push_back("SERVER_PORT=" + server.getPortString());
 	_envVars.push_back("SERVER_PROTOCOL=" + request.getVersion());
 	_envVars.push_back("SERVER_SOFTWARE=webserv/1.0");
 }
@@ -99,4 +99,26 @@ void CgiRequest::addHeader(const HttpRequest& request, const std::string& header
 	if (it != headers.end()) {
 		_envVars.push_back(envVarName + "=" + it->second);
 	}
+}
+
+std::string CgiRequest::resolveServerName(const ServerConfig& server, const HttpRequest& request) const {
+	const std::vector<std::string>& serverNames = server.getServerNames();
+	if (serverNames.empty()) {
+		return server.getHost();
+	}
+
+	const std::map<std::string, std::string>& headers = request.getHeaders();
+	std::map<std::string, std::string>::const_iterator it = headers.find("host");
+	if (it != headers.end() && !it->second.empty()) {
+		size_t colonPos = it->second.find(':');
+		std::string hostName = (colonPos != std::string::npos)
+			? it->second.substr(0, colonPos)
+			: it->second;
+		for (size_t i = 0; i < serverNames.size(); ++i) {
+			if (serverNames[i] == hostName) {
+				return serverNames[i];
+			}
+		}
+	}
+	return serverNames[0];
 }

@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include "ServerConfig.hpp"
 #include "LocationConfig.hpp"
 #include "HttpRequest.hpp"
 
@@ -18,9 +19,10 @@ class CgiRequest {
 
 		CgiRequest();
 		void addHeader(const HttpRequest& request, const std::string& headerKey, const std::string& envVarName);
+		std::string resolveServerName(const ServerConfig& server, const HttpRequest& request) const;
 	
 	public:
-		CgiRequest(const LocationConfig& location, const HttpRequest& request);
+		CgiRequest(const ServerConfig& server, const LocationConfig& location, const HttpRequest& request);
 		CgiRequest(const CgiRequest& other);
 		CgiRequest& operator=(const CgiRequest& other);
 		~CgiRequest();
