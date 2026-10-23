@@ -32,9 +32,21 @@ CgiRequest::CgiRequest(const LocationConfig& location, const HttpRequest& reques
 	_envVars.push_back("REQUEST_METHOD=" + request.getMethod());
 
 	
-	addHeader(request, "host", "HTTP_HOST");
-	addHeader(request, "user-agent", "HTTP_USER_AGENT");
-	addHeader(request, "accept", "HTTP_ACCEPT");
+	const std::map<std::string, std::string>& headers = request.getHeaders();
+	for (std::map<std::string, std::string>::const_iterator headerIt = headers.begin(); headerIt != headers.end(); ++headerIt) {
+		if (headerIt->first == "content-length" || headerIt->first == "content-type") {
+			continue;
+		}
+		std::string envVarName = "HTTP_";
+		for (size_t i = 0; i < headerIt->first.length(); ++i) {
+			if (headerIt->first[i] == '-') {
+				envVarName += '_';
+			} else {
+				envVarName += static_cast<char>(std::toupper(static_cast<unsigned char>(headerIt->first[i])));
+			}
+		}
+		_envVars.push_back(envVarName + "=" + headerIt->second);
+	}
 	
 	// _envVars.push_back("SCRIPT_NAME" +);
 
