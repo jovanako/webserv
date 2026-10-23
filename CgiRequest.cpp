@@ -8,24 +8,36 @@ CgiRequest::CgiRequest()
 	  _bodyFileDescriptor(-1) {}
 
 CgiRequest::CgiRequest(const ServerConfig& server, const LocationConfig& location, const HttpRequest& request) {
-	size_t dotPos = request.getUri().find_last_of('.');
-	std::string extension = request.getUri().substr(dotPos);
+	std::string scriptName = resolveScriptName(location, request);
+	std::string pathInfo = request.getUri().substr(scriptName.length());
+
+	size_t dotPos = scriptName.find_last_of('.');
+	std::string extension = (dotPos != std::string::npos) ? scriptName.substr(dotPos) : "";
 
 	std::map<std::string, std::string> cgiHandlers = location.getCgiHandlers();
 	std::map<std::string, std::string>::iterator it = cgiHandlers.find(extension);
 	if (it == cgiHandlers.end()) {
 		// TODO - throw
+	} else {
+		_executable = it->second;
 	}
-	_executable = it->second;
-	
-	_scriptPath = request.makeFullPath(location);
-	std::string scriptDir = _scriptPath.substr(_scriptPath.find_last_of('/'));
-	_workingDirectory = location.getRoot() + _scriptPath;
+
+	std::string fullUriPath = request.makeFullPath(location);
+	_scriptPath = fullUriPath.substr(0, fullUriPath.length() - pathInfo.length());
+	size_t lastSlash = _scriptPath.find_last_of('/');
+	if (lastSlash == std::string::npos) {
+		_workingDirectory = ".";
+	} else if (lastSlash == 0) {
+		_workingDirectory = "/";
+	} else {
+		_workingDirectory = _scriptPath.substr(0, lastSlash);
+	}
 
 	addHeader(request, "content-length", "CONTENT_LENGTH");
 	addHeader(request, "content-type", "CONTENT_TYPE");
 
 	_envVars.push_back("GATEWAY_INTERFACE=CGI/1.1");
+	_envVars.push_back("PATH_INFO=" + pathInfo);
 
 	// _envVars.push_back("REMOTE_ADDR=" + );
 	// _envVars.push_back("REMOTE_HOST=" + );
@@ -48,7 +60,7 @@ CgiRequest::CgiRequest(const ServerConfig& server, const LocationConfig& locatio
 		_envVars.push_back(envVarName + "=" + headerIt->second);
 	}
 	
-	// _envVars.push_back("SCRIPT_NAME" +);
+	_envVars.push_back("SCRIPT_NAME=" + scriptName);
 
 	_envVars.push_back("SERVER_NAME=" + resolveServerName(server, request));
 	_envVars.push_back("SERVER_PORT=" + server.getPortString());
@@ -99,6 +111,31 @@ void CgiRequest::addHeader(const HttpRequest& request, const std::string& header
 	if (it != headers.end()) {
 		_envVars.push_back(envVarName + "=" + it->second);
 	}
+}
+
+std::string CgiRequest::resolveScriptName(const LocationConfig& location, const HttpRequest& request) const {
+	const std::string& uri = request.getUri();
+	const std::map<std::string, std::string>& cgiHandlers = location.getCgiHandlers();
+
+	size_t segStart = 1;
+	while (segStart <= uri.length()) {
+		size_t slashPos = uri.find('/', segStart);
+		size_t segEnd = (slashPos == std::string::npos) ? uri.length() : slashPos;
+		std::string segment = uri.substr(segStart, segEnd - segStart);
+
+		size_t dotPos = segment.find_last_of('.');
+		if (dotPos != std::string::npos) {
+			std::string ext = segment.substr(dotPos);
+			if (cgiHandlers.find(ext) != cgiHandlers.end()) {
+				return uri.substr(0, segEnd);
+			}
+		}
+		if (slashPos == std::string::npos) {
+			break;
+		}
+		segStart = slashPos + 1;
+	}
+	return uri;
 }
 
 std::string CgiRequest::resolveServerName(const ServerConfig& server, const HttpRequest& request) const {

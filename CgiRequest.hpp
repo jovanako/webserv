@@ -18,8 +18,10 @@ class CgiRequest {
 		int							_bodyFileDescriptor;
 
 		CgiRequest();
-		void addHeader(const HttpRequest& request, const std::string& headerKey, const std::string& envVarName);
-		std::string resolveServerName(const ServerConfig& server, const HttpRequest& request) const;
+		
+		void 		addHeader(const HttpRequest& request, const std::string& headerKey, const std::string& envVarName);
+		std::string	resolveScriptName(const LocationConfig& location, const HttpRequest& request) const;
+		std::string	resolveServerName(const ServerConfig& server, const HttpRequest& request) const;
 	
 	public:
 		CgiRequest(const ServerConfig& server, const LocationConfig& location, const HttpRequest& request);
