@@ -123,9 +123,8 @@ void HttpRequest::storeUriParts(const std::string& uri) {
 	size_t queryPos = uri.find('?');
 	if (queryPos != std::string::npos) {
 		std::string rawUri = uri.substr(0, queryPos);
-		std::string rawQuery = uri.substr(queryPos + 1);
 		_uri = decodePercentEncoding(rawUri);
-		_queryString = decodePercentEncoding(rawQuery);
+		_queryString = uri.substr(queryPos + 1);
 	} else {
 		_uri = decodePercentEncoding(uri);
 		_queryString = "";

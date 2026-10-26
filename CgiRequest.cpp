@@ -41,6 +41,7 @@ CgiRequest::CgiRequest(const ServerConfig& server, const LocationConfig& locatio
 	if (!pathInfo.empty()) {
 		_envVars.push_back("PATH_TRANSLATED=" + resolvePathTranslated(location, pathInfo));
 	}
+	_envVars.push_back("QUERY_STRING=" + request.getQueryString());
 
 	_envVars.push_back("REMOTE_ADDR=" + request.getRemoteAddr());
 	_envVars.push_back("REMOTE_HOST=" + request.getRemoteAddr());

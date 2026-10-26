@@ -202,7 +202,7 @@ The getter functions expose parsed request data without changing it:
 - `isChunked()` reports whether `Transfer-Encoding: chunked` was received.
 - `getMethod()` returns the method.
 - `getUri()` returns the decoded path.
-- `getQueryString()` returns the decoded query string.
+- `getQueryString()` returns the raw query string.
 - `getVersion()` returns the HTTP version.
 - `getHeaders()` returns the normalized header map.
 - `getBody()` returns the raw request body.
@@ -220,7 +220,7 @@ Rejects control characters, DEL, and invalid percent sequences. A percent sign m
 
 ### `storeUriParts(const std::string&)`
 
-Splits the URI at `?`, decodes the path and query using percent-decoding, then stores them in `_uri` and `_queryString`.
+Splits the URI at `?`, decodes the path using percent-decoding, and stores the decoded path in `_uri` and the raw query string in `_queryString`.
 
 ## Header handling
 
