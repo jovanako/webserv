@@ -21,9 +21,23 @@ ServerManager& ServerManager::operator=(const ServerManager& other) {
 
 ServerManager::~ServerManager() {}
 
-int ServerManager::acceptConnection(int listenFd) {
+static std::string ipv4ToString(const struct sockaddr_in& clientAddr) {
+	uint32_t ip = ntohl(clientAddr.sin_addr.s_addr);
+	std::ostringstream oss;
+	oss << ((ip >> 24) & 0xFF) << "."
+		<< ((ip >> 16) & 0xFF) << "."
+		<< ((ip >> 8) & 0xFF) << "."
+		<< (ip & 0xFF);
+	return oss.str();
+}
+
+int ServerManager::acceptConnection(int listenFd, std::string& clientIp) {
+	struct sockaddr_in clientAddr;
+	std::memset(&clientAddr, 0, sizeof(clientAddr));
+	socklen_t addrLen = sizeof(clientAddr);
+
 	// extracts the first connection request and creates new fd for the client
-	int clientFd = accept(listenFd, NULL, NULL);
+	int clientFd = accept(listenFd, reinterpret_cast<struct sockaddr*>(&clientAddr), &addrLen);
 	// if there are no pending connections, return to the polling loop
 	if (clientFd < 0) {
 		if (errno != EAGAIN && errno != EWOULDBLOCK) {
@@ -33,6 +47,7 @@ int ServerManager::acceptConnection(int listenFd) {
 		}
 		return -1; // safely exit the function to keep the server loop running
 	}
+	clientIp = ipv4ToString(clientAddr);
 	return clientFd;
 }
 
@@ -49,17 +64,19 @@ void ServerManager::registerClientSocket(int clientFd,
 	pendingFds.push_back(pfd);
 }
 
-void ServerManager::configureClient(Client& client, int listenFd) {
+void ServerManager::configureClient(Client& client, int listenFd, const std::string& clientIp) {
 	std::map<int, size_t>::iterator it = _listenSockets.find(listenFd);
 	if (it != _listenSockets.end()) {
 		client.setServer(_servers[it->second]);
 	}
 
 	client.setVirtualHosts(_servers);
+	client.setClientIp(clientIp);
 }
 
 void ServerManager::acceptClient(int listenFd, std::vector<struct pollfd>& pendingFds) {
-	int clientFd = acceptConnection(listenFd);
+	std::string clientIp;
+	int clientFd = acceptConnection(listenFd, clientIp);
 	if (clientFd < 0) {
 		return;
 	}
@@ -68,7 +85,7 @@ void ServerManager::acceptClient(int listenFd, std::vector<struct pollfd>& pendi
 	registerClientSocket(clientFd, pendingFds);
 
 	Client client(clientFd);
-	configureClient(client, listenFd);
+	configureClient(client, listenFd, clientIp);
 	_clients[clientFd] = client;
 }
 

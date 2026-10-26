@@ -4,7 +4,8 @@ HttpRequest::HttpRequest()
 	: _parseState(PARSE_REQUEST_LINE),
 	  _contentLength(0),
 	  _errorCode(0),
-	  _isChunked(false) {}
+	  _isChunked(false),
+	  _remoteAddr("") {}
 
 HttpRequest::HttpRequest(const HttpRequest& other) {
 	*this = other;
@@ -22,6 +23,7 @@ HttpRequest& HttpRequest::operator=(const HttpRequest& other){
 		_contentLength = other._contentLength;
 		_errorCode = other._errorCode;
 		_isChunked = other._isChunked;
+		_remoteAddr = other._remoteAddr;
 	}
 	return *this;
 }
@@ -35,6 +37,10 @@ void HttpRequest::setRequestState(ParsingState state) {
 
 void HttpRequest::setErrorCode(int code) {
 	_errorCode = code;
+}
+
+void HttpRequest::setRemoteAddr(const std::string& remoteAddr) {
+	_remoteAddr = remoteAddr;
 }
 
 void HttpRequest::setMethod(const std::string& method) {
@@ -166,6 +172,10 @@ int HttpRequest::getErrorCode() const {
 
 bool HttpRequest::isChunked() const {
 	return _isChunked;
+}
+
+const std::string& HttpRequest::getRemoteAddr() const {
+	return _remoteAddr;
 }
 
 const std::string& HttpRequest::getMethod() const {

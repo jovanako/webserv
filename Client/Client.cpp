@@ -4,13 +4,15 @@
 Client::Client() 
 	: _socketFd(-1),
 	  _clientState(READING_HEADER),
-	  _bytesSent(0)
+	  _bytesSent(0),
+	  _clientIp("")
   {}
 
 Client::Client(int fd)
 	: _socketFd(fd),
 	  _clientState(READING_HEADER),
-	  _bytesSent(0) {}
+	  _bytesSent(0),
+	  _clientIp("") {}
 
 Client::Client(const Client& other) {
 	*this = other;
@@ -27,6 +29,7 @@ Client& Client::operator=(const Client& other) {
 		_writeBuffer = other._writeBuffer;
 		_bytesSent = other._bytesSent;
 		_virtualHosts = other._virtualHosts;
+		_clientIp = other._clientIp;
 	}
 	return *this;
 }
@@ -49,6 +52,10 @@ const std::vector<ServerConfig>& Client::getVirtualHosts() const {
 	return _virtualHosts;
 }
 
+const std::string& Client::getClientIp() const {
+	return _clientIp;
+}
+
 void Client::setClientState(ConnectionState state) {
 	_clientState = state;
 }
@@ -59,6 +66,11 @@ void Client::setServer(const ServerConfig& server) {
 
 void Client::setVirtualHosts(const std::vector<ServerConfig>& hosts) {
 	_virtualHosts = hosts;
+}
+
+void Client::setClientIp(const std::string& clientIp) {
+	_clientIp = clientIp;
+	_parser.getRequest().setRemoteAddr(_clientIp);
 }
 
 static std::string getFileExtension(const std::string& path) {
@@ -455,6 +467,7 @@ void Client::finalizeResponse() {
 
 void Client::resetForNextRequest() {
 	_parser.reset();
+	_parser.getRequest().setRemoteAddr(_clientIp);
 	_response = HttpResponse();
 	_writeBuffer.clear();
 	_bytesSent = 0;

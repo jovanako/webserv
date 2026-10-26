@@ -32,6 +32,7 @@ class HttpRequest {
 		size_t								_contentLength;
 		int									_errorCode;
 		bool								_isChunked;
+		std::string							_remoteAddr;
 
 		int validateUriStructure(const std::string& uri) const;
 		bool hasValidUriCharacters(const std::string& uri) const;
@@ -55,6 +56,7 @@ class HttpRequest {
 		size_t										getContentLength() const;
 		int											getErrorCode() const;
 		bool										isChunked() const;
+		const std::string&							getRemoteAddr() const;
 		
 		void setRequestState(ParsingState state);
 		void setMethod(const std::string& method);
@@ -62,6 +64,7 @@ class HttpRequest {
 		void setVersion(const std::string& version);
 		void setContentLength(size_t len);
 		void setErrorCode(int code);
+		void setRemoteAddr(const std::string& remoteAddr);
 
 		void addHeader(const std::string& key, const std::string& value);
 		void appendBody(const char* data, size_t size);

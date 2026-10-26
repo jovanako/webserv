@@ -35,6 +35,7 @@ class Client {
 		std::vector<char>			_writeBuffer;
 		size_t						_bytesSent;
 		std::vector<ServerConfig>	_virtualHosts;
+		std::string					_clientIp;
 		// ... buffers, timers, etc.
 
 		void		handleReadHeader();
@@ -108,10 +109,12 @@ class Client {
 		int									getSocketFd() const;
 		const ServerConfig&					getServer() const;
 		const std::vector<ServerConfig>&	getVirtualHosts() const;
+		const std::string&					getClientIp() const;
 
 		void setClientState(ConnectionState state);
 		void setServer(const ServerConfig& server);
 		void setVirtualHosts(const std::vector<ServerConfig>& hosts);
+		void setClientIp(const std::string& clientIp);
 };
 
 #endif

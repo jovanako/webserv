@@ -24,10 +24,10 @@ class ServerManager {
 		std::map<int, size_t>		_listenSockets;
 
 		void acceptClient(int listenFd, std::vector<struct pollfd>& pendingFds);
-		int acceptConnection(int listenFd);
+		int acceptConnection(int listenFd, std::string& clientIp);
 		void setClientNonBlocking(int clientFd);
 		void registerClientSocket(int clientFd, std::vector<struct pollfd>& pendingFds);
-		void configureClient(Client& client, int listenFd);
+		void configureClient(Client& client, int listenFd, const std::string& clientIp);
 		void removeClient(int clientFd);
 		bool handleClientEvent(size_t pollIndex);
 		bool handleClientInput(size_t pollIndex, int clientFd, Client& client);

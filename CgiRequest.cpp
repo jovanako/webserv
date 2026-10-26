@@ -39,8 +39,8 @@ CgiRequest::CgiRequest(const ServerConfig& server, const LocationConfig& locatio
 	_envVars.push_back("GATEWAY_INTERFACE=CGI/1.1");
 	_envVars.push_back("PATH_INFO=" + pathInfo);
 
-	// _envVars.push_back("REMOTE_ADDR=" + );
-	// _envVars.push_back("REMOTE_HOST=" + );
+	_envVars.push_back("REMOTE_ADDR=" + request.getRemoteAddr());
+	_envVars.push_back("REMOTE_HOST=" + request.getRemoteAddr());
 	_envVars.push_back("REQUEST_METHOD=" + request.getMethod());
 
 	
