@@ -21,6 +21,7 @@ class CgiRequest {
 		
 		void 		addHeader(const HttpRequest& request, const std::string& headerKey, const std::string& envVarName);
 		std::string	resolveScriptName(const LocationConfig& location, const HttpRequest& request) const;
+		std::string	resolvePathTranslated(const LocationConfig& location, const std::string& pathInfo) const;
 		std::string	resolveServerName(const ServerConfig& server, const HttpRequest& request) const;
 	
 	public:

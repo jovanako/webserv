@@ -38,6 +38,9 @@ CgiRequest::CgiRequest(const ServerConfig& server, const LocationConfig& locatio
 
 	_envVars.push_back("GATEWAY_INTERFACE=CGI/1.1");
 	_envVars.push_back("PATH_INFO=" + pathInfo);
+	if (!pathInfo.empty()) {
+		_envVars.push_back("PATH_TRANSLATED=" + resolvePathTranslated(location, pathInfo));
+	}
 
 	_envVars.push_back("REMOTE_ADDR=" + request.getRemoteAddr());
 	_envVars.push_back("REMOTE_HOST=" + request.getRemoteAddr());
@@ -136,6 +139,22 @@ std::string CgiRequest::resolveScriptName(const LocationConfig& location, const 
 		segStart = slashPos + 1;
 	}
 	return uri;
+}
+
+std::string CgiRequest::resolvePathTranslated(const LocationConfig& location, const std::string& pathInfo) const {
+	if (pathInfo.empty()) {
+		return "";
+	}
+
+	std::string fullPath = location.getRoot();
+	if (!fullPath.empty() && fullPath[fullPath.length() - 1] == '/') {
+		fullPath.erase(fullPath.length() - 1);
+	}
+	if (pathInfo[0] != '/') {
+		fullPath += "/";
+	}
+	fullPath += pathInfo;
+	return fullPath;
 }
 
 std::string CgiRequest::resolveServerName(const ServerConfig& server, const HttpRequest& request) const {
