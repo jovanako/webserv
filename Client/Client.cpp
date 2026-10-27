@@ -24,6 +24,8 @@ Client& Client::operator=(const Client& other) {
 		_socketFd = other._socketFd;
 		_clientState = other._clientState;
 		_parser = other._parser;
+		_handler = other._handler;
+		_responseBuilder = other._responseBuilder;
 		_response = other._response;
 		_server = other._server;
 		_writeBuffer = other._writeBuffer;
@@ -73,7 +75,7 @@ void Client::setClientIp(const std::string& clientIp) {
 	_parser.getRequest().setRemoteAddr(_clientIp);
 }
 
-static std::string getFileExtension(const std::string& path) {
+/*static std::string getFileExtension(const std::string& path) {
 	// find the last dot and the last slash
 	size_t dotPos = path.find_last_of('.');
 	size_t slashPos = path.find_last_of('/');
@@ -124,7 +126,7 @@ static std::string getMimeType(const std::string& path) {
 	return mimeTypeForExtension(ext);
 }
 
-/*bool Client::findHeaderEnd(size_t& headerEnd) const {
+bool Client::findHeaderEnd(size_t& headerEnd) const {
 	headerEnd = _readBuffer.find("\r\n\r\n");
 	return headerEnd != std::string::npos;
 }*/
@@ -400,7 +402,7 @@ void Client::handleReadBody() {
 	}
 }
 
-bool Client::loadCustomErrorPage(int statusCode, std::string& body,
+/*bool Client::loadCustomErrorPage(int statusCode, std::string& body,
 	std::string& mimeType) const {
 	const std::map<int, std::string>& errorPages = _server.getErrorPages();
 	std::map<int, std::string>::const_iterator it = errorPages.find(statusCode);
@@ -418,7 +420,7 @@ bool Client::loadCustomErrorPage(int statusCode, std::string& body,
 	std::ostringstream stream;
 	stream << file.rdbuf();
 	body = stream.str();
-	mimeType = getMimeType(filePath);
+	mimeType = _handler.getMimeType(filePath);
 	return true;
 }
 
@@ -463,6 +465,16 @@ void Client::finalizeResponse() {
 	_response.setHeader("Content-Length", oss.str());
 
 	setClientState(WRITING_RESPONSE);
+}*/
+
+void Client::setupErrorResponse(int statusCode) {
+	_responseBuilder.buildErrorResponse(statusCode, _response, _server, _parser.getRequest());
+	setClientState(WRITING_RESPONSE);
+}
+
+void Client::finalizeResponse() {
+	_responseBuilder.buildResponse(_response, _parser.getRequest());
+	setClientState(WRITING_RESPONSE);
 }
 
 void Client::resetForNextRequest() {
@@ -473,7 +485,7 @@ void Client::resetForNextRequest() {
 	_bytesSent = 0;
 	_clientState = READING_HEADER;
 }
-
+/*
 static std::string autoindexBaseUri(const std::string& requestUri) {
 	std::string baseUri = requestUri;
 	if (!baseUri.empty() && baseUri[baseUri.length() - 1] != '/') {
@@ -817,38 +829,23 @@ bool Client::validateMethod(const LocationConfig& location,
 	buildErrorResponse(405); // !!! added 405 method not allowed
 	finalizeResponse();
 	return false;
-}
+}*/
 
 void Client::handleProcessing() {
-	std::string uri = _parser.getRequest().getUri();
-	const LocationConfig* matchedLocation = findMatchingLocation(uri);
-	bool cgiFlag = false;
-	if (!validateLocation(matchedLocation)) {
+	int statusCode = _handler.processRequest(_parser.getRequest(), _response, _server);
+
+	if(statusCode == 0) {
+		setClientState(CGI_PIPE_WAIT);
 		return;
 	}
-
-	std::string method = _parser.getRequest().getMethod();
-	if (!validateMethod(*matchedLocation, method)) {
-		return;
+	if(statusCode >= 400) {
+		buildErrorResponse(statusCode);
 	}
 
-	if (handleRedirect(*matchedLocation)) {
-		return;
-	}
-
-	cgiFlag = tryCgiHandler(*matchedLocation, uri);
-
-	std::string fullPath = _parser.getRequest().makeFullPath(*matchedLocation);
-
-	if (!cgiFlag && !dispatchMethod(*matchedLocation, method, fullPath, uri)) {
-		return;
-	}
-	if (!cgiFlag) {
-		finalizeResponse();
-	}
+	finalizeResponse();
 }
 
-bool Client::shouldKeepAlive() const {
+/*bool Client::shouldKeepAlive() const {
 	if (_response.getStatusCode() >= 400 && _response.getStatusCode() != 404 && _response.getStatusCode() != 405) {
 		return false;
 	}
@@ -870,7 +867,7 @@ bool Client::shouldKeepAlive() const {
 		return (connVal == "keep-alive");
 	}
 	return false;
-}
+}*/
 
 
 void Client::handleWriteResponse() {
@@ -889,8 +886,10 @@ void Client::handleWriteResponse() {
 	_bytesSent += bytesWritten;
 
 	if(_bytesSent >= _writeBuffer.size()) {
-		if (shouldKeepAlive()) {
-			resetForNextRequest(); // set state back to reading header and clears request/response
+		if(_response.getHeader("Connection") == "keep-alive") {
+			resetForNextRequest();
+		/*if (shouldKeepAlive()) {
+			resetForNextRequest();*/ // set state back to reading header and clears request/response
 
 			size_t dummy; //walk me through this
 			if (_parser.hasHeaderEnd(dummy)) {

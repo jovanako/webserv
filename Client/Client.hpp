@@ -2,8 +2,10 @@
 #define CLIENT_HPP
 
 #include "RequestParser.hpp"
-#include "HttpResponse.hpp"
-#include "ServerConfig.hpp"
+#include "../HttpResponse.hpp"
+#include "RequestHandler.hpp"
+#include "ResponseBuilder.hpp"
+#include "../ServerConfig.hpp"
 #include <sys/socket.h>
 #include <unistd.h>
 #include <cstdio>
@@ -29,6 +31,8 @@ class Client {
 		int                 		_socketFd;
 		ConnectionState     		_clientState;
 		RequestParser				_parser;
+		RequestHandler				_handler;
+		ResponseBuilder				_responseBuilder;
 		HttpResponse        		_response;
 		ServerConfig				_server;
 		//std::string					_readBuffer;
@@ -51,18 +55,18 @@ class Client {
 		//?void		processFixedLengthBody();
 		void		handleReadBody();
 
-		bool		loadCustomErrorPage(int statusCode, std::string& body,
-			std::string& mimeType) const;
-		std::string	createDefaultErrorPage(int statusCode) const;
-		void		applyErrorResponseBody(const std::string& body,
-			const std::string& mimeType);
+		//bool		loadCustomErrorPage(int statusCode, std::string& body,
+		//	std::string& mimeType) const;
+		//std::string	createDefaultErrorPage(int statusCode) const;
+		//void		applyErrorResponseBody(const std::string& body,
+			//const std::string& mimeType);
 		void		handleWriteResponse();
 		void		handleCgiPipeWait();
-		bool		shouldKeepAlive() const;
+		//bool		shouldKeepAlive() const;
 		void		finalizeResponse();
 		void		resetForNextRequest();
 
-		int			handleGet(const LocationConfig& matchedLocation, std::string fullPath, const std::string uri);
+		/*int			handleGet(const LocationConfig& matchedLocation, std::string fullPath, const std::string uri);
 		bool		findIndexFile(const LocationConfig& matchedLocation,
 			std::string& fullPath, struct stat& pathStat) const;
 		int		serveAutoindex(const LocationConfig& matchedLocation,
@@ -76,6 +80,7 @@ class Client {
 		bool		writeUploadBody(std::ofstream& outFile,
 			const std::string& savePath);
 		void		setUploadResponse(const std::string& uri);
+		
 		const LocationConfig* findMatchingLocation(const std::string& uri) const;
 		bool		isMethodAllowed(const LocationConfig& location,
 			const std::string& method) const;
@@ -84,12 +89,12 @@ class Client {
 			const std::string& uri);
 		bool		dispatchMethod(const LocationConfig& location,
 			const std::string& method, const std::string& fullPath,
-			const std::string& uri);
-		bool		validateLocation(const LocationConfig* location);
-		bool		validateMethod(const LocationConfig& location,
-			const std::string& method);
-		int			handlePost(const LocationConfig& matchedLocation, const std::string uri);
-		int			handleDelete(const std::string& fullPath);
+			const std::string& uri);*/
+		//bool		validateLocation(const LocationConfig* location);
+		//bool		validateMethod(const LocationConfig& location,
+			//const std::string& method);
+		//int			handlePost(const LocationConfig& matchedLocation, const std::string uri);
+		//int			handleDelete(const std::string& fullPath);
 		
 	public:
 		Client();
@@ -102,9 +107,10 @@ class Client {
 		void handleWrite();
 		void handleProcessing();
 		void handleDone();
-
-		void buildErrorResponse(int statusCode);
 		
+		//void buildErrorResponse(int statusCode);
+		void setupErrorResponse(int statusCode);
+
 		ConnectionState						getClientState() const;
 		int									getSocketFd() const;
 		const ServerConfig&					getServer() const;

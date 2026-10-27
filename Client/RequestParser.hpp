@@ -27,7 +27,7 @@ private:
 	bool appendChunkData(size_t chunkLineEnd, size_t chunkSize);
 
 public:
-    RequestParser(/* args */);
+    RequestParser();
     ~RequestParser();
     RequestParser(const RequestParser& other);
     RequestParser& operator=(const RequestParser& other);

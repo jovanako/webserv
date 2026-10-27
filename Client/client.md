@@ -20,3 +20,5 @@ This update introduces a structural refactor to the `Client` class, breaking it 
 This initial extraction paves the way for isolating the remaining distinct responsibilities from the `Client` class:
 1. **RequestHandler:** To take over URI routing, method validation, CGI execution, and file system operations (`handleGet`, `handlePost`, `serveAutoindex`).
 2. **ResponseBuilder:** To manage `HttpResponse` payload construction, MIME-type mapping, and dynamic error page generation.
+
+
