@@ -245,7 +245,7 @@ void Client::prepareRequestBody(size_t headerEnd) {
 void Client::handleReadHeader() {
 	size_t headerEnd;
 	//walk me through this later
-	if(!readHeaderChunk()) {
+	if(!_parser.hasHeaderEnd(headerEnd) && !readHeaderChunk()) {
 		return;
 	}
 	if(_parser.hasHeaderEnd(headerEnd)) {
@@ -384,10 +384,6 @@ void Client::processFixedLengthBody() {
 }*/
 
 void Client::handleReadBody() {
-	if (!readBodyChunk()) {
-		return;
-	}
-
 	bool finishedParsing = false;
 	if (_parser.getRequest().isChunked()) {
 		finishedParsing = _parser.parseChunkedBody(_response);
@@ -839,7 +835,8 @@ void Client::handleProcessing() {
 		return;
 	}
 	if(statusCode >= 400) {
-		buildErrorResponse(statusCode);
+		setupErrorResponse(statusCode);
+		return;
 	}
 
 	finalizeResponse();
@@ -916,7 +913,9 @@ void Client::handleRead() {
 	if (_clientState == READING_HEADER) {
 		handleReadHeader();
 	} else if (_clientState == READING_BODY) {
-		handleReadBody();
+		if (readBodyChunk()) {
+			handleReadBody();
+		}
 	}
 }
 

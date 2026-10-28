@@ -71,6 +71,14 @@ std::vector<char> HttpResponse::getBody() const {
 	return _body;
 }
 
+std::string HttpResponse::getHeader(const std::string& key) const {
+	std::map<std::string, std::string>::const_iterator it = _headers.find(key);
+	if (it != _headers.end()) {
+		return it->second;
+	}
+	return "";
+}
+
 void HttpResponse::setVersion(const std::string& version) {
 	_version = version;
 }

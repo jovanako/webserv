@@ -24,6 +24,7 @@ class HttpResponse {
 		std::string			getVersion() const;
 		int					getStatusCode() const;
 		std::string			getStatusMessage(int code) const;
+		std::string			getHeader(const std::string& key) const;
 		std::vector<char>	getBody() const;
 		
 		void setVersion(const std::string& version);

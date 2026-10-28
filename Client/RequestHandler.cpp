@@ -170,13 +170,6 @@ bool		RequestHandler::tryCgiHandler(const LocationConfig& location, const std::s
 	return false;
 }
 
-static std::string autoindexBaseUri(const std::string& requestUri) {
-    std::string baseUri = requestUri;
-    if(!baseUri.empty() && baseUri[baseUri.length() - 1] != '/')
-        baseUri += "/";
-    return baseUri;
-} //walk me through
-
 int		RequestHandler::dispatchMethod(const LocationConfig& location, const std::string& method, const std::string& fullPath, const std::string& uri, const HttpRequest& request, HttpResponse& response) const {
 	if (method == "GET") {
 		return handleGet(location, fullPath, uri, response); //!= 0;
@@ -367,6 +360,7 @@ int	    RequestHandler::redirectDirectoryRequest(const std::string& uri, HttpRes
 		return 0;
 	}
 
+	response.setStatusCode(301);
 	response.setHeader("Location", uri + "/");
 	//buildErrorResponse(301); // moved permanently
 	return 301;
