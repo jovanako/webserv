@@ -42,6 +42,9 @@ class LocationConfig {
 		void addAllowedMethod(const std::string& method);
 		void addCgiHandler(const std::string& extension, const std::string& path);
 
+		std::string resolveScriptName(const std::string& uri) const;
+		std::string getCgiHandler(const std::string& scriptName) const;
+
 };
 
 #endif

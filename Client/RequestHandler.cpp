@@ -154,20 +154,16 @@ int RequestHandler::handleRedirect(const LocationConfig& location, HttpResponse&
 	return 500;
 }
 bool		RequestHandler::tryCgiHandler(const LocationConfig& location, const std::string& uri) const {
-	const std::map<std::string, std::string> cgiHandlers = location.getCgiHandlers();
-	for (std::map<std::string, std::string>::const_iterator iter = cgiHandlers.begin();
-		iter != cgiHandlers.end(); ++iter) {
-		const std::string& extension = iter->first;
-		if (uri.length() >= extension.length()
-			&& uri.compare(uri.length() - extension.length(), extension.length(), extension) == 0) {
-			// exeAssigns new contents to the vector, replacing its current contents, and modifying its size accordingly.
-			char* const argv[] = {NULL};
-			char* const envp[] = {NULL};
-			execve(iter->second.c_str(), argv, envp); // TO DO fork() ...
-			return true;
-		}
+	std::string scriptName = location.resolveScriptName(uri);
+	std::string handler = location.getCgiHandler(scriptName);
+	if (handler.empty()) {
+		return false;
 	}
-	return false;
+
+	char* const argv[] = {NULL};
+	char* const envp[] = {NULL};
+	execve(handler.c_str(), argv, envp); // TO DO fork() ...
+	return true;
 }
 
 int		RequestHandler::dispatchMethod(const LocationConfig& location, const std::string& method, const std::string& fullPath, const std::string& uri, const HttpRequest& request, HttpResponse& response) const {

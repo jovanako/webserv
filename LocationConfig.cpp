@@ -88,3 +88,38 @@ void LocationConfig::addAllowedMethod(const std::string& method) {
 void LocationConfig::addCgiHandler(const std::string& extension, const std::string& path) {
 	_cgiHandlers[extension] = path;
 }
+
+std::string LocationConfig::resolveScriptName(const std::string& uri) const {
+	size_t segStart = 1;
+	while (segStart <= uri.length()) {
+		size_t slashPos = uri.find('/', segStart);
+		size_t segEnd = (slashPos == std::string::npos) ? uri.length() : slashPos;
+		std::string segment = uri.substr(segStart, segEnd - segStart);
+
+		size_t dotPos = segment.find_last_of('.');
+		if (dotPos != std::string::npos) {
+			std::string ext = segment.substr(dotPos);
+			if (_cgiHandlers.find(ext) != _cgiHandlers.end()) {
+				return uri.substr(0, segEnd);
+			}
+		}
+		if (slashPos == std::string::npos) {
+			break;
+		}
+		segStart = slashPos + 1;
+	}
+	return "";
+}
+
+std::string LocationConfig::getCgiHandler(const std::string& scriptName) const {
+	size_t dotPos = scriptName.find_last_of('.');
+	if (dotPos == std::string::npos) {
+		return "";
+	}
+	std::string extension = scriptName.substr(dotPos);
+	std::map<std::string, std::string>::const_iterator it = _cgiHandlers.find(extension);
+	if (it == _cgiHandlers.end()) {
+		return "";
+	}
+	return it->second;
+}

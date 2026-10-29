@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <stdexcept>
 #include "ServerConfig.hpp"
 #include "LocationConfig.hpp"
 #include "HttpRequest.hpp"

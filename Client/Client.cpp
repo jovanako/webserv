@@ -828,7 +828,14 @@ bool Client::validateMethod(const LocationConfig& location,
 }*/
 
 void Client::handleProcessing() {
-	int statusCode = _handler.processRequest(_parser.getRequest(), _response, _server);
+	int statusCode;
+	try {
+		statusCode = _handler.processRequest(_parser.getRequest(), _response, _server);
+	} catch (const std::exception& e) {
+		std::cerr << "Error: " << e.what() << "\n";
+		setupErrorResponse(500);
+		return;
+	}
 
 	if(statusCode == 0) {
 		setClientState(CGI_PIPE_WAIT);

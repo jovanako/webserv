@@ -9,18 +9,12 @@ CgiRequest::CgiRequest()
 
 CgiRequest::CgiRequest(const ServerConfig& server, const LocationConfig& location, const HttpRequest& request) {
 	std::string scriptName = resolveScriptName(location, request);
-	std::string pathInfo = request.getUri().substr(scriptName.length());
-
-	size_t dotPos = scriptName.find_last_of('.');
-	std::string extension = (dotPos != std::string::npos) ? scriptName.substr(dotPos) : "";
-
-	std::map<std::string, std::string> cgiHandlers = location.getCgiHandlers();
-	std::map<std::string, std::string>::iterator it = cgiHandlers.find(extension);
-	if (it == cgiHandlers.end()) {
-		// TODO - throw
-	} else {
-		_executable = it->second;
+	_executable = location.getCgiHandler(scriptName);
+	if (_executable.empty()) {
+		throw std::runtime_error("No CGI handler matched");
 	}
+
+	std::string pathInfo = request.getUri().substr(scriptName.length());
 
 	std::string fullUriPath = request.makeFullPath(location);
 	_scriptPath = fullUriPath.substr(0, fullUriPath.length() - pathInfo.length());
@@ -118,28 +112,7 @@ void CgiRequest::addHeader(const HttpRequest& request, const std::string& header
 }
 
 std::string CgiRequest::resolveScriptName(const LocationConfig& location, const HttpRequest& request) const {
-	const std::string& uri = request.getUri();
-	const std::map<std::string, std::string>& cgiHandlers = location.getCgiHandlers();
-
-	size_t segStart = 1;
-	while (segStart <= uri.length()) {
-		size_t slashPos = uri.find('/', segStart);
-		size_t segEnd = (slashPos == std::string::npos) ? uri.length() : slashPos;
-		std::string segment = uri.substr(segStart, segEnd - segStart);
-
-		size_t dotPos = segment.find_last_of('.');
-		if (dotPos != std::string::npos) {
-			std::string ext = segment.substr(dotPos);
-			if (cgiHandlers.find(ext) != cgiHandlers.end()) {
-				return uri.substr(0, segEnd);
-			}
-		}
-		if (slashPos == std::string::npos) {
-			break;
-		}
-		segStart = slashPos + 1;
-	}
-	return uri;
+	return location.resolveScriptName(request.getUri());
 }
 
 std::string CgiRequest::resolvePathTranslated(const LocationConfig& location, const std::string& pathInfo) const {
