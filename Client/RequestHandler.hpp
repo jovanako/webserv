@@ -1,9 +1,9 @@
 #ifndef REQUESTHANDLER1_HPP
 #define REQUESTHANDLER1_HPP
 
-#include "HttpRequest.hpp"
-#include "HttpResponse.hpp"
-#include "ServerConfig.hpp"
+#include "../HttpRequest.hpp"
+#include "../HttpResponse.hpp"
+#include "../ServerConfig.hpp"
 #include <string>
 #include <sys/stat.h>
 #include <dirent.h>

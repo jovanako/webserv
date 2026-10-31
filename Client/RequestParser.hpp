@@ -1,9 +1,9 @@
 #ifndef REQUEST_PARSER_HPP
 #define REQUEST_PARSER_HPP
 
-#include "HttpRequest.hpp"
-#include "HttpResponse.hpp"
-#include "ServerConfig.hpp"
+#include "../HttpRequest.hpp"
+#include "../HttpResponse.hpp"
+#include "../ServerConfig.hpp"
 #include <string>
 #include <sstream>
 

@@ -2,7 +2,7 @@
 #define SERVERMANAGER_HPP
 
 #include "ServerConfig.hpp"
-#include "Client.hpp"
+#include "Client/Client.hpp"
 #include <vector>
 #include <sys/types.h>
 #include <sys/socket.h>

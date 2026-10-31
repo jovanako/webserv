@@ -11,7 +11,12 @@ SRCS = main.cpp \
 	LocationConfig.cpp \
 	ServerConfig.cpp \
 	ConfigParser.cpp \
-	Client.cpp 
+	ServerManager.cpp \
+	Client/Client.cpp \
+	Client/RequestHandler.cpp \
+	Client/RequestParser.cpp \
+	Client/ResponseBuilder.cpp \
+	cgi/CgiRequest.cpp
 
 OBJDIR = objects
 OBJS = $(SRCS:%.cpp=$(OBJDIR)/%.o)
@@ -22,7 +27,12 @@ DEPS = RequestBody.hpp \
 	   LocationConfig.hpp \
 	   ServerConfig.hpp \
 	   ConfigParser.hpp \
-	   Client.hpp 
+	   ServerManager.hpp \
+	   Client/Client.hpp \
+	   Client/RequestHandler.hpp \
+	   Client/RequestParser.hpp \
+	   Client/ResponseBuilder.hpp \
+	   cgi/CgiRequest.hpp
 
 all: $(NAME)
 

@@ -7,9 +7,9 @@
 #include <sstream>
 #include <cctype>
 #include <stdexcept>
-#include "ServerConfig.hpp"
-#include "LocationConfig.hpp"
-#include "HttpRequest.hpp"
+#include "../ServerConfig.hpp"
+#include "../LocationConfig.hpp"
+#include "../HttpRequest.hpp"
 
 
 class CgiRequest {
