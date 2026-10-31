@@ -52,6 +52,17 @@ CgiRequest::CgiRequest(const ServerConfig& server, const LocationConfig& locatio
 	_envVars.push_back("REMOTE_HOST=" + request.getRemoteAddr());
 	_envVars.push_back("REQUEST_METHOD=" + request.getMethod());
 
+	// as set by NGINX
+	std::string requestUri = request.getUri();
+	if (request.getQueryString().length() != 0) {
+		requestUri += "?" + request.getQueryString();
+	}
+	_envVars.push_back("REQUEST_URI=" + requestUri);
+	_envVars.push_back("DOCUMENT_ROOT=" + location.getRoot());
+
+	// Required by php-cgi
+	_envVars.push_back("REDIRECT_STATUS=200");
+
 	
 	const std::map<std::string, std::string>& headers = request.getHeaders();
 	for (std::map<std::string, std::string>::const_iterator headerIt = headers.begin(); headerIt != headers.end(); ++headerIt) {
@@ -70,6 +81,7 @@ CgiRequest::CgiRequest(const ServerConfig& server, const LocationConfig& locatio
 	}
 	
 	_envVars.push_back("SCRIPT_NAME=" + scriptName);
+	_envVars.push_back("SCRIPT_FILENAME=" + _scriptPath);
 
 	_envVars.push_back("SERVER_NAME=" + resolveServerName(server, request));
 	_envVars.push_back("SERVER_PORT=" + server.getPortString());
