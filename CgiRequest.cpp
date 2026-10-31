@@ -66,7 +66,8 @@ CgiRequest::CgiRequest(const ServerConfig& server, const LocationConfig& locatio
 	
 	const std::map<std::string, std::string>& headers = request.getHeaders();
 	for (std::map<std::string, std::string>::const_iterator headerIt = headers.begin(); headerIt != headers.end(); ++headerIt) {
-		if (headerIt->first == "content-length" || headerIt->first == "content-type") {
+		if (headerIt->first == "content-length" || headerIt->first == "content-type"
+			|| headerIt->first == "transfer-encoding") {
 			continue;
 		}
 		std::string envVarName = "HTTP_";
@@ -127,7 +128,7 @@ const RequestBody& CgiRequest::getBody() const {
 }
 
 void CgiRequest::addHeader(const HttpRequest& request, const std::string& headerKey, const std::string& envVarName) {
-	std::map<std::string, std::string> headers = request.getHeaders();
+	const std::map<std::string, std::string>& headers = request.getHeaders();
 	std::map<std::string, std::string>::const_iterator it = headers.find(headerKey);
 	if (it != headers.end()) {
 		_envVars.push_back(envVarName + "=" + it->second);
