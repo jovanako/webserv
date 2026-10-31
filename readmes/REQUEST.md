@@ -10,15 +10,17 @@ Here is why `ParsingState` is specifically required in your implementation:
 
 - **Triggering Error Responses:** The `Client` class actively monitors this state during the parsing phase. If it detects that `_request.getRequestState() == HttpRequest::PARSE_ERROR`, it immediately stops extracting data, sets the response status code to the trapped error, and finalizes the response to send back to the client.
 
-# --> `std::vector<char> _body`
+# --> `RequestBody _body`
 
-The `_body` variable is defined as an `std::vector<char>` primarily to safely handle raw binary data.
+The `_body` member in `HttpRequest` (and `CgiRequest`) is an instance of `RequestBody`, which encapsulates the request payload in an OS file-descriptor-backed temporary file rather than keeping large uploads in a raw in-memory buffer.
 
-- **Binary File Uploads:** The project requirements mandate that the server must support file uploads. Uploaded files (like images, executables, or archives) contain arbitrary binary data, including null bytes (`\0`). Using `std::vector<char>` guarantees that these raw bytes are stored exactly as received without the risk of null-termination truncation that can sometimes occur when handling C-strings.
+- **Binary File Uploads & Arbitrary Payloads:** Uploaded files (images, archives, executables) can contain arbitrary binary data, including null bytes (`\0`). Writing raw byte chunks directly to an underlying file descriptor via `write()` preserves every byte without C-string null-termination issues or large contiguous heap reallocations.
 
-- **Efficient Buffer Appending:** Because the server must operate in a non-blocking manner, an HTTP request body will often arrive in multiple fragmented chunks over time. `std::vector<char>` allows the `HttpRequest::appendBody()` method to easily and safely append these incoming raw network buffers using `_body.insert(_body.end(), data, data + size)`.
+- **Lazy Temporary File Creation:** `RequestBody` starts with `_fd = -1` and only opens a temporary file in `/tmp` on the first non-empty call to `append()`. Requests without a body (such as `GET` and `DELETE`) never allocate a file descriptor or touch the disk. Immediately after opening the file, `std::remove()` unlinks the path so the operating system automatically reclaims the disk space as soon as all file descriptors referencing it are closed.
 
-- **Contiguous Memory:** It provides a dynamic, contiguous block of memory. This makes it straightforward to eventually write the payload out to a file descriptor, pass it to a CGI script, or save it to a designated upload directory.
+- **Direct CGI & Upload Integration:** Because CGI scripts read the request body from `STDIN_FILENO` (`dup2()`), storing the body in a file descriptor allows `CgiRequest` to pass `_body.getFd()` directly to the child process after rewinding the offset to `0` (`lseek(_fd, 0, SEEK_SET)`), and allows `POST` upload handlers to stream the payload out via `writeTo()`.
+
+- **Safe C++98 Copy & RAII Lifecycle:** When `RequestBody` is copied (for example, into `CgiRequest`), `operator=` duplicates the open descriptor with `dup()`, and `~RequestBody()` / `reset()` closes it, preventing dangling descriptors or file-descriptor leaks across keep-alive requests.
 
 # --> Payload
 
@@ -30,7 +32,7 @@ Think of a network request like a physical package:
 
 - **The Payload (Body):** Is the actual contents of the box. This is the image file, the submitted login credentials, or the HTML document being transferred.
 
-In the context of your HTTP server project, the payload is the request or response "body". For example, if a user uploads a file to your server, the raw binary data of that file is the payload, which your `HttpRequest` stores in its `_body` vector. If that payload exeeds the allowed size limits, your server rejects it with a 413 "Payload Too Large" error.
+In the context of your HTTP server project, the payload is the request or response "body". For example, if a user uploads a file to your server, the raw binary data of that file is the payload, which your `HttpRequest` stores via its `RequestBody _body` member. If that payload exceeds the allowed size limits, your server rejects it with a 413 "Payload Too Large" error.
 
 # --> Percent-Encoding
 
@@ -157,11 +159,11 @@ Creates an empty request. It starts in `PARSE_REQUEST_LINE`, with zero content l
 
 ### Copy constructor and assignment operator
 
-Copy all request state, including the method, URI, query string, version, headers, body, content length, error code, and chunked flag.
+Copy all request state, including the method, URI, query string, version, headers, `RequestBody` (duplicating its file descriptor if open), content length, error code, chunked flag, and remote address.
 
 ### Destructor
 
-Releases the request object. The class uses standard containers, so they clean up their own storage.
+Releases the request object. Standard containers clean up their own storage, and `_body`'s destructor closes its file descriptor if open.
 
 ## State and value setters
 
@@ -172,6 +174,10 @@ Changes the parser state. The states describe whether the request line, headers,
 ### `setErrorCode(int)`
 
 Stores the HTTP error code associated with a parsing failure.
+
+### `setRemoteAddr(const std::string&)`
+
+Stores the client's IPv4 address string so downstream components (such as `CgiRequest`) can populate `REMOTE_ADDR` and `REMOTE_HOST`.
 
 ### `setMethod(const std::string&)`
 
@@ -200,12 +206,13 @@ The getter functions expose parsed request data without changing it:
 - `getRequestState()` returns the parser state.
 - `getErrorCode()` returns the current parsing error.
 - `isChunked()` reports whether `Transfer-Encoding: chunked` was received.
+- `getRemoteAddr()` returns the client IP address.
 - `getMethod()` returns the method.
 - `getUri()` returns the decoded path.
 - `getQueryString()` returns the raw query string.
 - `getVersion()` returns the HTTP version.
 - `getHeaders()` returns the normalized header map.
-- `getBody()` returns the raw request body.
+- `getBody()` returns the `RequestBody` (const or mutable reference).
 - `getContentLength()` returns the parsed body length.
 
 ## URI helpers
@@ -293,8 +300,62 @@ Validates label length, allowed characters, and hyphen placement. When the label
 
 ### `appendBody(const char*, size_t)`
 
-Appends raw bytes to `_body`. It accepts binary data and does nothing for a null pointer or zero length.
+Appends raw bytes to `_body` (`RequestBody::append()`). If writing to the temporary body file fails, it sets `_errorCode = 500`, switches `_parseState` to `PARSE_ERROR`, and returns `false`.
+
+### `rewindBody()`
+
+Rewinds the underlying `RequestBody` file descriptor offset back to byte `0` (`RequestBody::rewind()`) once body parsing completes.
+
+### `resetBody()`
+
+Closes and resets `_body` (`RequestBody::reset()`).
 
 ### `makeFullPath(const LocationConfig&)`
 
 Combines the matched location's root with the request URI after removing the location prefix. It also normalizes the slash between the root and remaining URI path.
+
+# Current `RequestBody` Function Map
+
+This section describes the responsibilities of the `RequestBody` class (`RequestBody.hpp` / `RequestBody.cpp`).
+
+## Object lifecycle
+
+### `RequestBody()`
+
+Initializes an empty body state with `_fd = -1`, an empty path, and `_size = 0` without touching the filesystem.
+
+### Copy constructor and assignment operator
+
+Reset any existing open descriptor on the target instance, duplicate `other._fd` with `dup()` when `other._fd != -1`, and copy `_size`.
+
+### `~RequestBody()`
+
+Calls `reset()` to ensure any open file descriptor is closed when the object is destroyed.
+
+## Core operations
+
+### `openTempFile()`
+
+Generates a unique path `/tmp/webserv_body_<pid>_<counter>`, opens it with `O_CREAT | O_TRUNC | O_RDWR`, and immediately unlinks the path with `std::remove()` so the file is automatically deleted by the kernel when the last descriptor closes.
+
+### `append(const char*, size_t)`
+
+Lazily opens the temporary file on the first non-empty write, loops `write()` until all bytes in the chunk are written, and increments `_size`. Returns `false` on I/O failure.
+
+### `rewind()`
+
+Seeks `_fd` back to the start of the file (`lseek(_fd, 0, SEEK_SET)`) so consumers can read the stored payload from the beginning.
+
+### `writeTo(std::ofstream&)`
+
+Rewinds `_fd`, reads the stored body in 4 KB chunks, writes them to `outFile`, and rewinds `_fd` again when finished.
+
+### `reset()`
+
+Closes `_fd` (if open), removes `_filePath` if still present, and resets `_size` to `0`.
+
+## Accessors
+
+- `getFd()` returns the underlying file descriptor (`-1` if no body was written).
+- `getSize()` returns the total number of bytes written to the body.
+- `empty()` returns `true` when `_size == 0`.

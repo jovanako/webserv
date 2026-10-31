@@ -16,7 +16,7 @@ class CgiRequest {
 		std::string					_scriptPath;
 		std::string					_workingDirectory;
 		std::vector<std::string>	_envVars;
-		int							_bodyFileDescriptor;
+		RequestBody					_body;
 
 		CgiRequest();
 		
@@ -35,7 +35,7 @@ class CgiRequest {
 		const std::string&					getScriptPath() const;
 		const std::string&					getWorkingDirectory() const;
 		const std::vector<std::string>&		getEnvVars() const;
-		int									getBodyFileDescriptor() const;
+		const RequestBody&					getBody() const;
 };
 
 #endif

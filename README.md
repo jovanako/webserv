@@ -422,7 +422,7 @@ When you are dealing with an HTTP body, you might be receiving a JPEG image, a P
 
 **1. It is Semantically Correct:** You are not dealing with a readable text string; you are dealing with a raw chunk of binary data. `.data()` communicates to anyone reading your code that you are working with raw memory bytes.
 
-**2. You Already Know the Size:** System calls like `recv()` and memory copy functions (like the vector's `insert()` method you are using in `appendBody()`) do not look for null terminators. They only care about the starting pointer and the exact number of bytes to copy (`contentLen`).
+**2. You Already Know the Size:** System calls like `recv()` and `write()` (used inside `RequestBody::append()` via `appendBody()`) do not look for null terminators. They only care about the starting pointer and the exact number of bytes to copy (`contentLen`).
 
 **3. Performance:** By using `.data()`, you guarantee ero overhead. You bypass any unnecessary C++98 background checks for null terminators and just instantly dump the raw network bytes into your request objest.
 

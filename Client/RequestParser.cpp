@@ -196,24 +196,32 @@ bool RequestParser::readChunkSize(size_t& lineEnd, size_t& chunkSize, HttpRespon
     return true;
 }
 
-bool RequestParser::finishChunkedBody(size_t chunkLineEnd) {
+bool RequestParser::finishChunkedBody(size_t chunkLineEnd, HttpResponse& response) {
     // check if the final "\r\n\r\n" is completely in the buffer
     if (_readBuffer.length() >= chunkLineEnd + 4 &&
         _readBuffer.substr(chunkLineEnd, 4) == "\r\n\r\n") {
         _readBuffer.erase(0, chunkLineEnd + 4);
-        //_clientState = PROCESSING;
+        _request.setContentLength(_request.getBody().getSize());
+        if (!_request.rewindBody()) {
+            response.setStatusCode(500);
+            return false;
+        }
         return true;
     }
     return false;
 }
 
-bool RequestParser::appendChunkData(size_t chunkLineEnd, size_t chunkSize) {	// check if the entire chunk data + trailing "\r\n" has been received
+bool RequestParser::appendChunkData(size_t chunkLineEnd, size_t chunkSize, HttpResponse& response) {
+    // check if the entire chunk data + trailing "\r\n" has been received
     if (_readBuffer.length() < chunkLineEnd + 2 + chunkSize + 2) {
         return false; // wait for the rest of the chunk
     }
 
     // append the chunk data to the request
-    _request.appendBody(_readBuffer.data() + chunkLineEnd + 2, chunkSize);
+    if (!_request.appendBody(_readBuffer.data() + chunkLineEnd + 2, chunkSize)) {
+        response.setStatusCode(500);
+        return false;
+    }
 
     // erase the processed chunk size, chunk data, and both \r\n from the buffer
     _readBuffer.erase(0, chunkLineEnd + 2 + chunkSize + 2);
@@ -230,28 +238,32 @@ bool RequestParser::parseChunkedBody(HttpResponse& response) {
 
         // a chunk size of 0 indicates the end of the request body
         if (chunkSize == 0) {
-            return finishChunkedBody(pos); // wait for final "\r\n" if not fully received yet
+            return finishChunkedBody(pos, response); // wait for final "\r\n" if not fully received yet
         }
 
-        if (!appendChunkData(pos, chunkSize)) {
+        if (!appendChunkData(pos, chunkSize, response)) {
             return false;
         }
     }
 }
+
 bool RequestParser::processFixedLengthBody(const ServerConfig& server, HttpResponse& response) {
-size_t contentLen = _request.getContentLength();
+    size_t contentLen = _request.getContentLength();
 
-if (_readBuffer.length() > server.getClientMaxBodySize()) {
-    //buildErrorResponse(413); // pazload too large
-    response.setStatusCode(413);
+    if (_readBuffer.length() > server.getClientMaxBodySize()) {
+        //buildErrorResponse(413); // pazload too large
+        response.setStatusCode(413);
+        return false;
+    }
+
+    if (_readBuffer.length() >= contentLen) {
+        if (!_request.appendBody(_readBuffer.data(), contentLen) || !_request.rewindBody()) {
+            response.setStatusCode(500);
+            return false;
+        }
+        _readBuffer.erase(0, contentLen);
+        //_clientState = PROCESSING;
+        return true;
+    }
     return false;
-}
-
-if (_readBuffer.length() >= contentLen) {
-    _request.appendBody(_readBuffer.data(), contentLen);
-    _readBuffer.erase(0, contentLen);
-    //_clientState = PROCESSING;
-    return true;
-}
-return false;
 }

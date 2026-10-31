@@ -23,8 +23,8 @@ private:
 	bool parseHeaderLine(const std::string& line, HttpResponse& response);
 
     bool readChunkSize(size_t& lineEnd, size_t& chunkSize, HttpResponse& response);
-	bool finishChunkedBody(size_t chunkLineEnd);
-	bool appendChunkData(size_t chunkLineEnd, size_t chunkSize);
+	bool finishChunkedBody(size_t chunkLineEnd, HttpResponse& response);
+	bool appendChunkData(size_t chunkLineEnd, size_t chunkSize, HttpResponse& response);
 
 public:
     RequestParser();

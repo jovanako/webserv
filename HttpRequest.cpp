@@ -198,7 +198,11 @@ const std::map<std::string, std::string>& HttpRequest::getHeaders() const {
 	return _headers;
 }
 
-const std::vector<char>& HttpRequest::getBody() const {
+const RequestBody& HttpRequest::getBody() const {
+	return _body;
+}
+
+RequestBody& HttpRequest::getBody() {
 	return _body;
 }
 
@@ -431,11 +435,21 @@ void HttpRequest::addHeader(const std::string& key, const std::string& value) {
 	return;
 }
 
-void HttpRequest::appendBody(const char* data, size_t size) {
-    if (data && size > 0) {
-        _body.insert(_body.end(), data, data + size); // Appends the full chunk safely
-        // _contentLength can either track total accumulated bytes or the header's Content-Length
-    }
+bool HttpRequest::appendBody(const char* data, size_t size) {
+	if (!_body.append(data, size)) {
+		_errorCode = 500;
+		_parseState = PARSE_ERROR;
+		return false;
+	}
+	return true;
+}
+
+bool HttpRequest::rewindBody() const {
+	return _body.rewind();
+}
+
+void HttpRequest::resetBody() {
+	_body.reset();
 }
 
 std::string HttpRequest::makeFullPath(const LocationConfig& matchedLocation) const {

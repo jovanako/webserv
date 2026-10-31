@@ -666,14 +666,7 @@ std::string Client::buildUploadPath(const LocationConfig& matchedLocation,
 
 bool Client::writeUploadBody(std::ofstream& outFile,
 	const std::string& savePath) {
-	// use write() so that it writes binary data correctly
-	const std::vector<char>& body = _parser.getRequest().getBody();
-	if (body.empty()) {
-		return true;
-	}
-
-	outFile.write(&body[0], body.size());
-	if (outFile.fail()) {
+	if (!_parser.getRequest().getBody().writeTo(outFile)) {
 		outFile.close();
 		std::remove(savePath.c_str());
 		buildErrorResponse(500); // internal server error
@@ -913,7 +906,7 @@ void Client::handleCgiPipeWait() {
 }
 
 void Client::handleDone() {
-
+	_parser.reset();
 }
 
 void Client::handleRead() {

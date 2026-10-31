@@ -1,18 +1,48 @@
 # --> HttpRequest
 
 ### Responsibility 
-Represents and encapsulates a parsed client HTTP request. It acts as a data container and state tracker that stores the HTTP method (e.g. `GET`, `POST`, `DELETE`), target URI, HTTP protocol version, key-value request headers, and the raw payload body. It also tracks parsing progress through its `ParsingState` machine (`PARSE_REQUEST_LINE`, `PARSE_HEADERS`, `PARSE_BODY`, `PARSE_DONE`, `PARSE_ERROR`) and preserves any parsing error code encountered.
+Represents and encapsulates a parsed client HTTP request. It acts as a data container and state tracker that stores the HTTP method (e.g. `GET`, `POST`, `DELETE`), target URI, query string, HTTP protocol version, client remote address, key-value request headers, and the request payload via `RequestBody _body`. It also tracks parsing progress through its `ParsingState` machine (`PARSE_REQUEST_LINE`, `PARSE_HEADERS`, `PARSE_BODY`, `PARSE_DONE`, `PARSE_ERROR`) and preserves any parsing error code encountered.
 
 ### Project Context
 Operates in the **request parsing** and **ingestion** layer, specifically during non-blocking socket reads on client file descriptors.
 
 ### Interactions and Connections
 
--  **Client/Socket Manager:** As raw chunked data is received via `read()` / `recv()`, the socket read handler pushes buffer fragments into `appendBody()` or populates fields step-by-step while advancing `_parseState`.
+- **RequestParser / Client:** As raw data is received via `recv()`, `RequestParser` parses headers and feeds body chunks into `appendBody()` while advancing `_parseState`, then calls `rewindBody()` once the full payload has arrived.
 
--  **Router/Request Handler:** Once `_parseState == PARSE_DONE`, the routing engine queries `getMethod()`, `getUri()`, and `getHeaders()`, to determine access rules and matching routes.
+- **Router / RequestHandler:** Once parsing completes, the routing engine queries `getMethod()`, `getUri()`, `getHeaders()`, and `getBody()` to determine access rules, handle file uploads, or dispatch CGI.
 
--  **CGI Executor:** Supplies environment variables (derived from `_uri`, `_headers`, and `_method`) and passes `_body` through pipes to the standard input of the child CGI process.
+- **CgiRequest:** Supplies request metadata (URI, query string, headers, method, version, remote IP) and its `RequestBody` to initialize a `CgiRequest`.
+
+# --> RequestBody
+
+### Responsibility
+Encapsulates the HTTP request body as a file-descriptor-backed resource stored in an unlinked temporary file. It handles lazy creation of the temporary file (`/tmp/webserv_body_<pid>_<counter>`), incremental binary writes (`append()`), offset rewinding (`rewind()`), streaming to upload files (`writeTo()`), and RAII descriptor lifecycle management (`dup()` on copy, `close()` in `reset()` / destructor).
+
+### Project Context
+Operates across the **request ingestion**, **file upload**, and **CGI execution** layers, bridging non-blocking network reads with file-descriptor consumers.
+
+### Interactions and Connections
+
+- **HttpRequest & RequestParser:** Owned by `HttpRequest` (`_body`). `RequestParser` appends fixed-length or unchunked body bytes into it and rewinds it once body parsing finishes.
+
+- **CgiRequest:** Copied into `CgiRequest::_body` (duplicating the underlying file descriptor via `dup()`), providing a ready-to-read file descriptor (`getBody().getFd()`) for `dup2(..., STDIN_FILENO)` in the CGI child process.
+
+- **RequestHandler / Client (`handlePost`):** Streams uploaded payload bytes from the temporary file descriptor to the target upload file via `writeTo()`.
+
+# --> CgiRequest
+
+### Responsibility
+Prepares and holds the execution context required to launch a CGI script for a given HTTP request, server, and location block. It resolves the CGI interpreter path (`_executable`), script filesystem path (`_scriptPath`), working directory (`_workingDirectory`), RFC 3875 environment variables (`_envVars`), and a `RequestBody` handle (`_body`) for standard input redirection.
+
+### Project Context
+Operates in the **CGI preparation and execution** layer when a request URI matches a configured CGI extension in `LocationConfig`.
+
+### Interactions and Connections
+
+- **LocationConfig & ServerConfig:** Queries `LocationConfig::resolveScriptName()` and `LocationConfig::getCgiHandler()` to determine the script boundary (`SCRIPT_NAME` vs. `PATH_INFO`) and interpreter binary, as well as server host/port settings.
+
+- **HttpRequest & RequestBody:** Extracts headers, query string, client IP, and method to build `CONTENT_LENGTH`, `CONTENT_TYPE`, `GATEWAY_INTERFACE`, `PATH_INFO`, `HTTP_*`, and server variables, and copies `request.getBody()` so the CGI process has its own descriptor for `STDIN`.
 
 # --> HttpResponse
 

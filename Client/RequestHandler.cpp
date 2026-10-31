@@ -396,14 +396,7 @@ std::string RequestHandler::buildUploadPath(const LocationConfig& matchedLocatio
 }
 
 bool	    RequestHandler::writeUploadBody(std::ofstream& outFile, const std::string& savePath, const HttpRequest& request) const {
-	// use write() so that it writes binary data correctly
-	const std::vector<char>& body = request.getBody();
-	if (body.empty()) {
-		return true;
-	}
-
-	outFile.write(&body[0], body.size());
-	if (outFile.fail()) {
+	if (!request.getBody().writeTo(outFile)) {
 		outFile.close();
 		std::remove(savePath.c_str());
 		//buildErrorResponse(500); // internal server error

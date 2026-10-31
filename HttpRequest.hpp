@@ -8,6 +8,7 @@
 #include <cctype>
 #include <unistd.h>
 #include "LocationConfig.hpp"
+#include "RequestBody.hpp"
 
 class HttpRequest {
 	public:
@@ -28,7 +29,7 @@ class HttpRequest {
 		std::string							_queryString;
 		std::string							_version;
 		std::map<std::string, std::string>	_headers;
-		std::vector<char>					_body;
+		RequestBody							_body;
 		size_t								_contentLength;
 		int									_errorCode;
 		bool								_isChunked;
@@ -52,7 +53,8 @@ class HttpRequest {
 		const std::string&							getQueryString() const;
 		const std::string&							getVersion() const;
 		const std::map<std::string, std::string>&	getHeaders() const;
-		const std::vector<char>&					getBody() const;
+		const RequestBody&							getBody() const;
+		RequestBody&								getBody();
 		size_t										getContentLength() const;
 		int											getErrorCode() const;
 		bool										isChunked() const;
@@ -67,7 +69,9 @@ class HttpRequest {
 		void setRemoteAddr(const std::string& remoteAddr);
 
 		void addHeader(const std::string& key, const std::string& value);
-		void appendBody(const char* data, size_t size);
+		bool appendBody(const char* data, size_t size);
+		bool rewindBody() const;
+		void resetBody();
 
 		std::string	makeFullPath(const LocationConfig& matchedLocation) const;
 	};

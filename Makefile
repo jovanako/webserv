@@ -5,6 +5,7 @@ CXX = c++
 CXXFLAGS = -Wall -Wextra -Werror -std=c++98
 
 SRCS = main.cpp \
+	RequestBody.cpp \
 	HttpRequest.cpp \
 	HttpResponse.cpp \
 	LocationConfig.cpp \
@@ -15,7 +16,8 @@ SRCS = main.cpp \
 OBJDIR = objects
 OBJS = $(SRCS:%.cpp=$(OBJDIR)/%.o)
 
-DEPS = HttpRequest.hpp \
+DEPS = RequestBody.hpp \
+	   HttpRequest.hpp \
 	   HttpResponse.hpp \
 	   LocationConfig.hpp \
 	   ServerConfig.hpp \

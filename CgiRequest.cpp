@@ -5,9 +5,14 @@ CgiRequest::CgiRequest()
 	  _scriptPath(""),
 	  _workingDirectory(""),
 	  _envVars(),
-	  _bodyFileDescriptor(-1) {}
+	  _body() {}
 
-CgiRequest::CgiRequest(const ServerConfig& server, const LocationConfig& location, const HttpRequest& request) {
+CgiRequest::CgiRequest(const ServerConfig& server, const LocationConfig& location, const HttpRequest& request)
+	: _executable(""),
+	  _scriptPath(""),
+	  _workingDirectory(""),
+	  _envVars(),
+	  _body(request.getBody()) {
 	std::string scriptName = resolveScriptName(location, request);
 	_executable = location.getCgiHandler(scriptName);
 	if (_executable.empty()) {
@@ -27,7 +32,13 @@ CgiRequest::CgiRequest(const ServerConfig& server, const LocationConfig& locatio
 		_workingDirectory = _scriptPath.substr(0, lastSlash);
 	}
 
-	addHeader(request, "content-length", "CONTENT_LENGTH");
+	if (request.getHeaders().find("content-length") != request.getHeaders().end()) {
+		addHeader(request, "content-length", "CONTENT_LENGTH");
+	} else if (request.getBody().getSize() > 0) {
+		std::ostringstream oss;
+		oss << request.getBody().getSize();
+		_envVars.push_back("CONTENT_LENGTH=" + oss.str());
+	}
 	addHeader(request, "content-type", "CONTENT_TYPE");
 
 	_envVars.push_back("GATEWAY_INTERFACE=CGI/1.1");
@@ -76,7 +87,7 @@ CgiRequest& CgiRequest::operator=(const CgiRequest& other) {
 		_scriptPath = other._scriptPath;
 		_workingDirectory = other._workingDirectory;
 		_envVars = other._envVars;
-		_bodyFileDescriptor = other._bodyFileDescriptor;
+		_body = other._body;
 	}
 	return *this;
 }
@@ -99,8 +110,8 @@ const std::vector<std::string>& CgiRequest::getEnvVars() const {
 	return _envVars;
 }
 
-int CgiRequest::getBodyFileDescriptor() const {
-	return _bodyFileDescriptor;
+const RequestBody& CgiRequest::getBody() const {
+	return _body;
 }
 
 void CgiRequest::addHeader(const HttpRequest& request, const std::string& headerKey, const std::string& envVarName) {
