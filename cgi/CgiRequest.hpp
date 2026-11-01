@@ -18,19 +18,25 @@ class CgiRequest {
 		std::string					_scriptPath;
 		std::string					_workingDirectory;
 		std::vector<std::string>	_envVars;
-		RequestBody					_body;
+		const RequestBody&			_body;
 
 		CgiRequest();
+		CgiRequest& operator=(const CgiRequest& other);
 		
-		void 		addHeader(const HttpRequest& request, const std::string& headerKey, const std::string& envVarName);
-		std::string	resolveScriptName(const LocationConfig& location, const HttpRequest& request) const;
+		void		initPaths(const LocationConfig& location, const HttpRequest& request, std::string& scriptName, std::string& pathInfo);
+		void		initWorkingDirectory();
+		void		initContentEnvVars(const HttpRequest& request);
+		void		initStandardEnvVars(const ServerConfig& server, const LocationConfig& location, const HttpRequest& request, const std::string& scriptName, const std::string& pathInfo);
+		void		initHttpHeaderEnvVars(const HttpRequest& request);
+		void		addEnvVar(const std::string& key, const std::string& value);
+		void		addHeader(const HttpRequest& request, const std::string& headerKey, const std::string& envVarName);
+		std::string	resolveScriptPath(const LocationConfig& location, const std::string& scriptName) const;
 		std::string	resolvePathTranslated(const LocationConfig& location, const std::string& pathInfo) const;
 		std::string	resolveServerName(const ServerConfig& server, const HttpRequest& request) const;
 	
 	public:
 		CgiRequest(const ServerConfig& server, const LocationConfig& location, const HttpRequest& request);
 		CgiRequest(const CgiRequest& other);
-		CgiRequest& operator=(const CgiRequest& other);
 		~CgiRequest();
 
 		const std::string&					getExecutable() const;

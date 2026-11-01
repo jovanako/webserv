@@ -1,11 +1,33 @@
 #include "CgiRequest.hpp"
 
-CgiRequest::CgiRequest()
-	: _executable(""),
-	  _scriptPath(""),
-	  _workingDirectory(""),
-	  _envVars(),
-	  _body() {}
+static std::string toLowerCopy(const std::string& value) {
+	std::string lowerValue = value;
+	for (size_t i = 0; i < lowerValue.length(); ++i) {
+		lowerValue[i] = static_cast<char>(std::tolower(
+			static_cast<unsigned char>(lowerValue[i])));
+	}
+	return lowerValue;
+}
+
+static std::string formatHttpHeaderEnvKey(const std::string& headerKey) {
+	std::string envVarName = "HTTP_";
+	for (size_t i = 0; i < headerKey.length(); ++i) {
+		if (headerKey[i] == '-') {
+			envVarName += '_';
+		} else {
+			envVarName += static_cast<char>(std::toupper(
+				static_cast<unsigned char>(headerKey[i])));
+		}
+	}
+	return envVarName;
+}
+
+static bool isSkippedHttpHeader(const std::string& headerKey) {
+	return headerKey == "content-length"
+		|| headerKey == "content-type"
+		|| headerKey == "transfer-encoding"
+		|| headerKey == "proxy";
+}
 
 CgiRequest::CgiRequest(const ServerConfig& server, const LocationConfig& location, const HttpRequest& request)
 	: _executable(""),
@@ -13,97 +35,22 @@ CgiRequest::CgiRequest(const ServerConfig& server, const LocationConfig& locatio
 	  _workingDirectory(""),
 	  _envVars(),
 	  _body(request.getBody()) {
-	std::string scriptName = resolveScriptName(location, request);
-	_executable = location.getCgiHandler(scriptName);
-	if (_executable.empty()) {
-		throw std::runtime_error("No CGI handler matched");
-	}
+	std::string scriptName;
+	std::string pathInfo;
 
-	std::string pathInfo = request.getUri().substr(scriptName.length());
-
-	std::string fullUriPath = request.makeFullPath(location);
-	_scriptPath = fullUriPath.substr(0, fullUriPath.length() - pathInfo.length());
-	size_t lastSlash = _scriptPath.find_last_of('/');
-	if (lastSlash == std::string::npos) {
-		_workingDirectory = ".";
-	} else if (lastSlash == 0) {
-		_workingDirectory = "/";
-	} else {
-		_workingDirectory = _scriptPath.substr(0, lastSlash);
-	}
-
-	if (request.getHeaders().find("content-length") != request.getHeaders().end()) {
-		addHeader(request, "content-length", "CONTENT_LENGTH");
-	} else if (request.getBody().getSize() > 0) {
-		std::ostringstream oss;
-		oss << request.getBody().getSize();
-		_envVars.push_back("CONTENT_LENGTH=" + oss.str());
-	}
-	addHeader(request, "content-type", "CONTENT_TYPE");
-
-	_envVars.push_back("GATEWAY_INTERFACE=CGI/1.1");
-	_envVars.push_back("PATH_INFO=" + pathInfo);
-	if (!pathInfo.empty()) {
-		_envVars.push_back("PATH_TRANSLATED=" + resolvePathTranslated(location, pathInfo));
-	}
-	_envVars.push_back("QUERY_STRING=" + request.getQueryString());
-
-	_envVars.push_back("REMOTE_ADDR=" + request.getRemoteAddr());
-	_envVars.push_back("REMOTE_HOST=" + request.getRemoteAddr());
-	_envVars.push_back("REQUEST_METHOD=" + request.getMethod());
-
-	// as set by NGINX
-	std::string requestUri = request.getUri();
-	if (request.getQueryString().length() != 0) {
-		requestUri += "?" + request.getQueryString();
-	}
-	_envVars.push_back("REQUEST_URI=" + requestUri);
-	_envVars.push_back("DOCUMENT_ROOT=" + location.getRoot());
-
-	// Required by php-cgi
-	_envVars.push_back("REDIRECT_STATUS=200");
-
-	
-	const std::map<std::string, std::string>& headers = request.getHeaders();
-	for (std::map<std::string, std::string>::const_iterator headerIt = headers.begin(); headerIt != headers.end(); ++headerIt) {
-		if (headerIt->first == "content-length" || headerIt->first == "content-type"
-			|| headerIt->first == "transfer-encoding") {
-			continue;
-		}
-		std::string envVarName = "HTTP_";
-		for (size_t i = 0; i < headerIt->first.length(); ++i) {
-			if (headerIt->first[i] == '-') {
-				envVarName += '_';
-			} else {
-				envVarName += static_cast<char>(std::toupper(static_cast<unsigned char>(headerIt->first[i])));
-			}
-		}
-		_envVars.push_back(envVarName + "=" + headerIt->second);
-	}
-	
-	_envVars.push_back("SCRIPT_NAME=" + scriptName);
-	_envVars.push_back("SCRIPT_FILENAME=" + _scriptPath);
-
-	_envVars.push_back("SERVER_NAME=" + resolveServerName(server, request));
-	_envVars.push_back("SERVER_PORT=" + server.getPortString());
-	_envVars.push_back("SERVER_PROTOCOL=" + request.getVersion());
-	_envVars.push_back("SERVER_SOFTWARE=webserv/1.0");
+	initPaths(location, request, scriptName, pathInfo);
+	initWorkingDirectory();
+	initContentEnvVars(request);
+	initStandardEnvVars(server, location, request, scriptName, pathInfo);
+	initHttpHeaderEnvVars(request);
 }
 
-CgiRequest::CgiRequest(const CgiRequest& other) {
-	*this = other;
-}
-
-CgiRequest& CgiRequest::operator=(const CgiRequest& other) {
-	if (this != &other) {
-		_executable = other._executable;
-		_scriptPath = other._scriptPath;
-		_workingDirectory = other._workingDirectory;
-		_envVars = other._envVars;
-		_body = other._body;
-	}
-	return *this;
-}
+CgiRequest::CgiRequest(const CgiRequest& other)
+	: _executable(other._executable),
+	  _scriptPath(other._scriptPath),
+	  _workingDirectory(other._workingDirectory),
+	  _envVars(other._envVars),
+	  _body(other._body) {}
 
 CgiRequest::~CgiRequest() {}
 
@@ -127,16 +74,106 @@ const RequestBody& CgiRequest::getBody() const {
 	return _body;
 }
 
+void CgiRequest::initPaths(const LocationConfig& location, const HttpRequest& request, std::string& scriptName, std::string& pathInfo) {
+	scriptName = location.resolveScriptName(request.getUri());
+	_executable = location.getCgiHandler(scriptName);
+	if (_executable.empty()) {
+		throw std::runtime_error("No CGI handler matched");
+	}
+
+	pathInfo = request.getUri().substr(scriptName.length());
+	_scriptPath = resolveScriptPath(location, scriptName);
+}
+
+void CgiRequest::initWorkingDirectory() {
+	size_t lastSlash = _scriptPath.find_last_of('/');
+	if (lastSlash == std::string::npos) {
+		_workingDirectory = ".";
+	} else if (lastSlash == 0) {
+		_workingDirectory = "/";
+	} else {
+		_workingDirectory = _scriptPath.substr(0, lastSlash);
+	}
+}
+
+void CgiRequest::initContentEnvVars(const HttpRequest& request) {
+	if (request.getHeaders().find("content-length") != request.getHeaders().end()) {
+		addHeader(request, "content-length", "CONTENT_LENGTH");
+	} else if (request.getBody().getSize() > 0) {
+		std::ostringstream oss;
+		oss << request.getBody().getSize();
+		addEnvVar("CONTENT_LENGTH", oss.str());
+	}
+	addHeader(request, "content-type", "CONTENT_TYPE");
+}
+
+void CgiRequest::initStandardEnvVars(const ServerConfig& server, const LocationConfig& location, const HttpRequest& request, const std::string& scriptName, const std::string& pathInfo) {
+	addEnvVar("GATEWAY_INTERFACE", "CGI/1.1");
+	addEnvVar("PATH_INFO", pathInfo);
+	if (!pathInfo.empty()) {
+		addEnvVar("PATH_TRANSLATED", resolvePathTranslated(location, pathInfo));
+	}
+	addEnvVar("QUERY_STRING", request.getQueryString());
+	addEnvVar("REMOTE_ADDR", request.getRemoteAddr());
+	addEnvVar("REMOTE_HOST", request.getRemoteAddr());
+	addEnvVar("REQUEST_METHOD", request.getMethod());
+
+	// as set by NGINX
+	std::string requestUri = request.getUri();
+	if (!request.getQueryString().empty()) {
+		requestUri += "?" + request.getQueryString();
+	}
+	addEnvVar("REQUEST_URI", requestUri);
+	addEnvVar("DOCUMENT_ROOT", location.getRoot());
+
+	// Required by php-cgi
+	addEnvVar("REDIRECT_STATUS", "200");
+
+	addEnvVar("SCRIPT_NAME", scriptName);
+	addEnvVar("SCRIPT_FILENAME", _scriptPath);
+	addEnvVar("SERVER_NAME", resolveServerName(server, request));
+	addEnvVar("SERVER_PORT", server.getPortString());
+	addEnvVar("SERVER_PROTOCOL", request.getVersion());
+	addEnvVar("SERVER_SOFTWARE", "webserv/1.0");
+}
+
+void CgiRequest::initHttpHeaderEnvVars(const HttpRequest& request) {
+	const std::map<std::string, std::string>& headers = request.getHeaders();
+	for (std::map<std::string, std::string>::const_iterator headerIt = headers.begin(); headerIt != headers.end(); ++headerIt) {
+		if (isSkippedHttpHeader(headerIt->first)) {
+			continue;
+		}
+		addEnvVar(formatHttpHeaderEnvKey(headerIt->first), headerIt->second);
+	}
+}
+
+void CgiRequest::addEnvVar(const std::string& key, const std::string& value) {
+	_envVars.push_back(key + "=" + value);
+}
+
 void CgiRequest::addHeader(const HttpRequest& request, const std::string& headerKey, const std::string& envVarName) {
 	const std::map<std::string, std::string>& headers = request.getHeaders();
 	std::map<std::string, std::string>::const_iterator it = headers.find(headerKey);
 	if (it != headers.end()) {
-		_envVars.push_back(envVarName + "=" + it->second);
+		addEnvVar(envVarName, it->second);
 	}
 }
 
-std::string CgiRequest::resolveScriptName(const LocationConfig& location, const HttpRequest& request) const {
-	return location.resolveScriptName(request.getUri());
+std::string CgiRequest::resolveScriptPath(const LocationConfig& location, const std::string& scriptName) const {
+	std::string locPath = location.getPath();
+	std::string strippedScript = (scriptName.find(locPath) == 0)
+		? scriptName.substr(locPath.length())
+		: scriptName;
+
+	std::string fullPath = location.getRoot();
+	if (!fullPath.empty() && fullPath[fullPath.length() - 1] == '/') {
+		fullPath.erase(fullPath.length() - 1);
+	}
+	if (strippedScript.empty() || strippedScript[0] != '/') {
+		fullPath += "/";
+	}
+	fullPath += strippedScript;
+	return fullPath;
 }
 
 std::string CgiRequest::resolvePathTranslated(const LocationConfig& location, const std::string& pathInfo) const {
@@ -168,8 +205,9 @@ std::string CgiRequest::resolveServerName(const ServerConfig& server, const Http
 		std::string hostName = (colonPos != std::string::npos)
 			? it->second.substr(0, colonPos)
 			: it->second;
+		std::string lowerHost = toLowerCopy(hostName);
 		for (size_t i = 0; i < serverNames.size(); ++i) {
-			if (serverNames[i] == hostName) {
+			if (toLowerCopy(serverNames[i]) == lowerHost) {
 				return serverNames[i];
 			}
 		}
