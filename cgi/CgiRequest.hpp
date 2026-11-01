@@ -44,6 +44,8 @@ class CgiRequest {
 		const std::string&					getWorkingDirectory() const;
 		const std::vector<std::string>&		getEnvVars() const;
 		const RequestBody&					getBody() const;
+		std::vector<char*>					buildArgv() const;
+		std::vector<char*>					buildEnvp() const;
 };
 
 #endif

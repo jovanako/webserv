@@ -74,6 +74,25 @@ const RequestBody& CgiRequest::getBody() const {
 	return _body;
 }
 
+std::vector<char*> CgiRequest::buildArgv() const {
+	std::vector<char*> argv;
+	argv.reserve(3);
+	argv.push_back(const_cast<char*>(_executable.c_str()));
+	argv.push_back(const_cast<char*>(_scriptPath.c_str()));
+	argv.push_back(NULL);
+	return argv;
+}
+
+std::vector<char*> CgiRequest::buildEnvp() const {
+	std::vector<char*> envp;
+	envp.reserve(_envVars.size() + 1);
+	for (size_t i = 0; i < _envVars.size(); ++i) {
+		envp.push_back(const_cast<char*>(_envVars[i].c_str()));
+	}
+	envp.push_back(NULL);
+	return envp;
+}
+
 void CgiRequest::initPaths(const LocationConfig& location, const HttpRequest& request, std::string& scriptName, std::string& pathInfo) {
 	scriptName = location.resolveScriptName(request.getUri());
 	_executable = location.getCgiHandler(scriptName);
