@@ -18,10 +18,13 @@
 
 class ServerManager {
 	private:
+		static const int			POLL_TIMEOUT_MS = 1000;
+
 		std::vector<ServerConfig>	_servers;
 		std::vector<struct pollfd>	_pollFds;
 		std::map<int, Client>		_clients;
 		std::map<int, size_t>		_listenSockets;
+		std::map<int, int>			_cgiPipes;
 
 		void acceptClient(int listenFd, std::vector<struct pollfd>& pendingFds);
 		int acceptConnection(int listenFd, std::string& clientIp);
@@ -29,10 +32,16 @@ class ServerManager {
 		void registerClientSocket(int clientFd, std::vector<struct pollfd>& pendingFds);
 		void configureClient(Client& client, int listenFd, const std::string& clientIp);
 		void removeClient(int clientFd);
-		bool handleClientEvent(size_t pollIndex);
+		void registerCgiPipe(int pipeFd, int clientFd, std::vector<struct pollfd>& pendingFds);
+		void unregisterCgiPipe(int pipeFd);
+		void unregisterClientCgiPipes(int clientFd);
+		void syncClientPollEventsByFd(int clientFd, const Client& client);
+		bool handleCgiPipeEvent(size_t pollIndex);
+		void checkCgiTimeouts();
+		bool handleClientEvent(size_t pollIndex, std::vector<struct pollfd>& pendingFds);
 		bool handleClientInput(size_t pollIndex, int clientFd, Client& client);
 		bool removeCompletedClient(int clientFd, Client& client);
-		void processClient(Client& client);
+		void processClient(int clientFd, Client& client, std::vector<struct pollfd>& pendingFds);
 		void writeClientResponse(size_t pollIndex, Client& client);
 		void updateClientPollEvents(size_t pollIndex, const Client& client);
 		void initServers();

@@ -15,7 +15,6 @@
 
 class RequestHandler {
     private:
-        const LocationConfig* findMatchingLocation(const ServerConfig& server, std::string& uri) const;
 		bool		isMethodAllowed(const LocationConfig& location, const std::string& method) const;
 		int 		handleRedirect(const LocationConfig& location, HttpResponse& response) const;
 		bool		tryCgiHandler(const LocationConfig& location, const std::string& uri) const;
@@ -47,6 +46,7 @@ class RequestHandler {
         static std::string lowercaseExtension(const std::string& extension);
         static std::string mimeTypeForExtension(const std::string& extension);
 
+        const LocationConfig* findMatchingLocation(const ServerConfig& server, const std::string& uri) const;
         int processRequest(const HttpRequest& request, HttpResponse& response, const ServerConfig& server) const;
 
 };

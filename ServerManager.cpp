@@ -15,6 +15,7 @@ ServerManager& ServerManager::operator=(const ServerManager& other) {
 		_pollFds = other._pollFds;
 		_clients = other._clients;
 		_listenSockets = other._listenSockets;
+		_cgiPipes = other._cgiPipes;
 	}
 	return *this;
 }
@@ -89,9 +90,69 @@ void ServerManager::acceptClient(int listenFd, std::vector<struct pollfd>& pendi
 	_clients[clientFd] = client;
 }
 
+void ServerManager::registerCgiPipe(int pipeFd, int clientFd,
+	std::vector<struct pollfd>& pendingFds) {
+	if (pipeFd < 0) {
+		return;
+	}
+	struct pollfd pfd;
+	pfd.fd = pipeFd;
+	pfd.events = POLLIN;
+	pfd.revents = 0;
+	pendingFds.push_back(pfd);
+	_cgiPipes[pipeFd] = clientFd;
+}
+
+void ServerManager::unregisterCgiPipe(int pipeFd) {
+	if (pipeFd < 0) {
+		return;
+	}
+	_cgiPipes.erase(pipeFd);
+	for (std::vector<struct pollfd>::iterator it = _pollFds.begin();
+		it != _pollFds.end(); ++it) {
+		if (it->fd == pipeFd) {
+			_pollFds.erase(it);
+			break;
+		}
+	}
+}
+
+void ServerManager::unregisterClientCgiPipes(int clientFd) {
+	for (std::map<int, int>::iterator it = _cgiPipes.begin();
+		it != _cgiPipes.end(); ) {
+		if (it->second == clientFd) {
+			int pipeFd = it->first;
+			_cgiPipes.erase(it++);
+			for (std::vector<struct pollfd>::iterator pIt = _pollFds.begin();
+				pIt != _pollFds.end(); ++pIt) {
+				if (pIt->fd == pipeFd) {
+					_pollFds.erase(pIt);
+					break;
+				}
+			}
+		} else {
+			++it;
+		}
+	}
+}
+
+void ServerManager::syncClientPollEventsByFd(int clientFd, const Client& client) {
+	for (size_t i = 0; i < _pollFds.size(); ++i) {
+		if (_pollFds[i].fd == clientFd) {
+			updateClientPollEvents(i, client);
+			break;
+		}
+	}
+}
+
 void ServerManager::removeClient(int clientFd) {
+	unregisterClientCgiPipes(clientFd);
+	std::map<int, Client>::iterator cIt = _clients.find(clientFd);
+	if (cIt != _clients.end()) {
+		cIt->second.cleanupCgi();
+		_clients.erase(cIt);
+	}
 	close(clientFd);
-	_clients.erase(clientFd);
 	for (std::vector<struct pollfd>::iterator it = _pollFds.begin(); it != _pollFds.end(); ++it) {
 		if (it->fd == clientFd) {
 			_pollFds.erase(it);
@@ -127,10 +188,14 @@ bool ServerManager::handleClientInput(size_t pollIndex, int clientFd, Client& cl
 	return removeCompletedClient(clientFd, client);
 }
 
-void ServerManager::processClient(Client& client) {
+void ServerManager::processClient(int clientFd, Client& client,
+	std::vector<struct pollfd>& pendingFds) {
 	// perform route matching and preparation if reading is complete
 	if (client.getClientState() == Client::PROCESSING) {
 		client.handleProcessing();
+		if (client.getClientState() == Client::CGI_PIPE_WAIT) {
+			registerCgiPipe(client.getCgiPipeFd(), clientFd, pendingFds);
+		}
 	}
 }
 
@@ -151,7 +216,62 @@ void ServerManager::updateClientPollEvents(size_t pollIndex, const Client& clien
 	}
 }
 
-bool ServerManager::handleClientEvent(size_t pollIndex) {
+bool ServerManager::handleCgiPipeEvent(size_t pollIndex) {
+	int pipeFd = _pollFds[pollIndex].fd;
+	std::map<int, int>::iterator pipeIter = _cgiPipes.find(pipeFd);
+	if (pipeIter == _cgiPipes.end()) {
+		return false;
+	}
+
+	int clientFd = pipeIter->second;
+	std::map<int, Client>::iterator clientIter = _clients.find(clientFd);
+	if (clientIter == _clients.end()) {
+		unregisterCgiPipe(pipeFd);
+		return true;
+	}
+
+	Client& client = clientIter->second;
+	if (_pollFds[pollIndex].revents & (POLLIN | POLLHUP)) {
+		client.handleCgiPipeWait();
+	}
+
+	if (client.getClientState() != Client::CGI_PIPE_WAIT) {
+		unregisterCgiPipe(pipeFd);
+		syncClientPollEventsByFd(clientFd, client);
+		return true;
+	}
+	return false;
+}
+
+void ServerManager::checkCgiTimeouts() {
+	std::vector<int> timedOutPipes;
+	for (std::map<int, int>::const_iterator it = _cgiPipes.begin();
+		it != _cgiPipes.end(); ++it) {
+		std::map<int, Client>::iterator cIt = _clients.find(it->second);
+		if (cIt != _clients.end() && cIt->second.hasCgiTimedOut()) {
+			timedOutPipes.push_back(it->first);
+		}
+	}
+
+	for (size_t i = 0; i < timedOutPipes.size(); ++i) {
+		int pipeFd = timedOutPipes[i];
+		std::map<int, int>::iterator pIt = _cgiPipes.find(pipeFd);
+		if (pIt == _cgiPipes.end()) {
+			continue;
+		}
+		int clientFd = pIt->second;
+		unregisterCgiPipe(pipeFd);
+
+		std::map<int, Client>::iterator cIt = _clients.find(clientFd);
+		if (cIt != _clients.end()) {
+			cIt->second.handleCgiTimeout();
+			syncClientPollEventsByFd(clientFd, cIt->second);
+		}
+	}
+}
+
+bool ServerManager::handleClientEvent(size_t pollIndex,
+	std::vector<struct pollfd>& pendingFds) {
 	int currentFd = _pollFds[pollIndex].fd;
 	std::map<int, Client>::iterator clientIter = _clients.find(currentFd);
 	if (clientIter == _clients.end()) {
@@ -163,7 +283,7 @@ bool ServerManager::handleClientEvent(size_t pollIndex) {
 		return true;
 	}
 
-	processClient(client);
+	processClient(currentFd, client, pendingFds);
 	writeClientResponse(pollIndex, client);
 	if (removeCompletedClient(currentFd, client)) {
 		return true;
@@ -311,7 +431,7 @@ void ServerManager::initServers() {
 }
 
 bool ServerManager::waitForEvents() {
-	if (poll(&_pollFds[0], _pollFds.size(), -1) >= 0) {
+	if (poll(&_pollFds[0], _pollFds.size(), POLL_TIMEOUT_MS) >= 0) {
 		return true;
 	}
 
@@ -336,6 +456,7 @@ bool ServerManager::handlePollEvent(size_t pollIndex,
 	std::vector<struct pollfd>& pendingFds) {
 	int currentFd = _pollFds[pollIndex].fd;
 	std::map<int, size_t>::iterator serverIter = _listenSockets.find(currentFd);
+	std::map<int, int>::iterator pipeIter = _cgiPipes.find(currentFd);
 
 	if (_pollFds[pollIndex].revents & (POLLERR | POLLNVAL)) {
 		if (serverIter != _listenSockets.end()) {
@@ -344,6 +465,8 @@ bool ServerManager::handlePollEvent(size_t pollIndex,
 			close(currentFd);
 			_listenSockets.erase(serverIter);
 			_pollFds.erase(_pollFds.begin() + pollIndex);
+		} else if (pipeIter != _cgiPipes.end()) {
+			return handleCgiPipeEvent(pollIndex);
 		} else {
 			// it is definitely a client socket, safe to remove
 			removeClient(currentFd);
@@ -359,8 +482,12 @@ bool ServerManager::handlePollEvent(size_t pollIndex,
 		return false;
 	}
 
+	if (pipeIter != _cgiPipes.end()) {
+		return handleCgiPipeEvent(pollIndex);
+	}
+
 	// handle existing client traffic
-	return handleClientEvent(pollIndex);
+	return handleClientEvent(pollIndex, pendingFds);
 }
 
 void ServerManager::processPollEvents(std::vector<struct pollfd>& pendingFds) {
@@ -379,6 +506,8 @@ void ServerManager::processPollEvents(std::vector<struct pollfd>& pendingFds) {
 }
 
 void ServerManager::run() {
+	initServers();
+
 	// initialize a temporary container to hold newly accepted client file descriptors during the current polling cycle
 	std::vector<struct pollfd> pendingFds;
 
@@ -389,6 +518,7 @@ void ServerManager::run() {
 		}
 
 		processPollEvents(pendingFds);
+		checkCgiTimeouts();
 		addPendingClients(pendingFds);
 	}
 }

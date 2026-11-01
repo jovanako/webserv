@@ -32,6 +32,7 @@ static bool isSkippedHttpHeader(const std::string& headerKey) {
 CgiRequest::CgiRequest(const ServerConfig& server, const LocationConfig& location, const HttpRequest& request)
 	: _executable(""),
 	  _scriptPath(""),
+	  _scriptFileName(""),
 	  _workingDirectory(""),
 	  _envVars(),
 	  _body(request.getBody()) {
@@ -48,6 +49,7 @@ CgiRequest::CgiRequest(const ServerConfig& server, const LocationConfig& locatio
 CgiRequest::CgiRequest(const CgiRequest& other)
 	: _executable(other._executable),
 	  _scriptPath(other._scriptPath),
+	  _scriptFileName(other._scriptFileName),
 	  _workingDirectory(other._workingDirectory),
 	  _envVars(other._envVars),
 	  _body(other._body) {}
@@ -78,7 +80,7 @@ std::vector<char*> CgiRequest::buildArgv() const {
 	std::vector<char*> argv;
 	argv.reserve(3);
 	argv.push_back(const_cast<char*>(_executable.c_str()));
-	argv.push_back(const_cast<char*>(_scriptPath.c_str()));
+	argv.push_back(const_cast<char*>(_scriptFileName.c_str()));
 	argv.push_back(NULL);
 	return argv;
 }
@@ -108,10 +110,13 @@ void CgiRequest::initWorkingDirectory() {
 	size_t lastSlash = _scriptPath.find_last_of('/');
 	if (lastSlash == std::string::npos) {
 		_workingDirectory = ".";
+		_scriptFileName = _scriptPath;
 	} else if (lastSlash == 0) {
 		_workingDirectory = "/";
+		_scriptFileName = _scriptPath.substr(1);
 	} else {
 		_workingDirectory = _scriptPath.substr(0, lastSlash);
+		_scriptFileName = _scriptPath.substr(lastSlash + 1);
 	}
 }
 
@@ -149,7 +154,7 @@ void CgiRequest::initStandardEnvVars(const ServerConfig& server, const LocationC
 	addEnvVar("REDIRECT_STATUS", "200");
 
 	addEnvVar("SCRIPT_NAME", scriptName);
-	addEnvVar("SCRIPT_FILENAME", _scriptPath);
+	addEnvVar("SCRIPT_FILENAME", _scriptFileName);
 	addEnvVar("SERVER_NAME", resolveServerName(server, request));
 	addEnvVar("SERVER_PORT", server.getPortString());
 	addEnvVar("SERVER_PROTOCOL", request.getVersion());

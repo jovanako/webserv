@@ -27,6 +27,7 @@ Client& Client::operator=(const Client& other) {
 		_handler = other._handler;
 		_responseBuilder = other._responseBuilder;
 		_response = other._response;
+		_cgiExecutor = other._cgiExecutor;
 		_server = other._server;
 		_writeBuffer = other._writeBuffer;
 		_bytesSent = other._bytesSent;
@@ -44,6 +45,14 @@ Client::ConnectionState Client::getClientState() const {
 
 int Client::getSocketFd() const {
 	return _socketFd;
+}
+
+int Client::getCgiPipeFd() const {
+	return _cgiExecutor.getPipeFd();
+}
+
+bool Client::hasCgiTimedOut() const {
+	return _clientState == CGI_PIPE_WAIT && _cgiExecutor.hasTimedOut();
 }
 
 const ServerConfig& Client::getServer() const {
@@ -474,6 +483,7 @@ void Client::finalizeResponse() {
 }
 
 void Client::resetForNextRequest() {
+	_cgiExecutor.cleanup();
 	_parser.reset();
 	_parser.getRequest().setRemoteAddr(_clientIp);
 	_response = HttpResponse();
@@ -820,20 +830,38 @@ bool Client::validateMethod(const LocationConfig& location,
 	return false;
 }*/
 
+bool Client::startCgiExecution() {
+	const HttpRequest& request = _parser.getRequest();
+	const LocationConfig* matchedLocation = _handler.findMatchingLocation(_server, request.getUri());
+	if (!matchedLocation) {
+		setupErrorResponse(404);
+		return false;
+	}
+
+	CgiRequest cgiReq(_server, *matchedLocation, request);
+	if (!_cgiExecutor.start(cgiReq)) {
+		setupErrorResponse(_cgiExecutor.getErrorCode());
+		return false;
+	}
+
+	setClientState(CGI_PIPE_WAIT);
+	return true;
+}
+
 void Client::handleProcessing() {
 	int statusCode;
 	try {
 		statusCode = _handler.processRequest(_parser.getRequest(), _response, _server);
+		if (statusCode == 0) {
+			startCgiExecution();
+			return;
+		}
 	} catch (const std::exception& e) {
 		std::cerr << "Error: " << e.what() << "\n";
 		setupErrorResponse(500);
 		return;
 	}
 
-	if(statusCode == 0) {
-		setClientState(CGI_PIPE_WAIT);
-		return;
-	}
 	if(statusCode >= 400) {
 		setupErrorResponse(statusCode);
 		return;
@@ -902,10 +930,52 @@ void Client::handleWriteResponse() {
 }
 
 void Client::handleCgiPipeWait() {
+	if (_clientState != CGI_PIPE_WAIT) {
+		return;
+	}
 
+	_cgiExecutor.readOutput();
+	CgiExecutor::State state = _cgiExecutor.getState();
+
+	if (state == CgiExecutor::CGI_RUNNING) {
+		return;
+	}
+
+	if (state == CgiExecutor::CGI_ERROR) {
+		int errCode = _cgiExecutor.getErrorCode();
+		_cgiExecutor.cleanup();
+		setupErrorResponse(errCode > 0 ? errCode : 500);
+		return;
+	}
+
+	if (state == CgiExecutor::CGI_COMPLETE) {
+		CgiResponse cgiResp;
+		if (!cgiResp.parse(_cgiExecutor.getOutputBuffer())) {
+			_cgiExecutor.cleanup();
+			setupErrorResponse(502);
+			return;
+		}
+		cgiResp.applyTo(_response);
+		_cgiExecutor.cleanup();
+		finalizeResponse();
+	}
+}
+
+void Client::handleCgiTimeout() {
+	if (_clientState != CGI_PIPE_WAIT) {
+		return;
+	}
+	_cgiExecutor.handleTimeout();
+	_cgiExecutor.cleanup();
+	setupErrorResponse(504);
+}
+
+void Client::cleanupCgi() {
+	_cgiExecutor.cleanup();
 }
 
 void Client::handleDone() {
+	_cgiExecutor.cleanup();
 	_parser.reset();
 }
 

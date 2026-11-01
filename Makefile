@@ -16,7 +16,9 @@ SRCS = main.cpp \
 	Client/RequestHandler.cpp \
 	Client/RequestParser.cpp \
 	Client/ResponseBuilder.cpp \
-	cgi/CgiRequest.cpp
+	cgi/CgiRequest.cpp \
+	cgi/CgiResponse.cpp \
+	cgi/CgiExecutor.cpp
 
 OBJDIR = objects
 OBJS = $(SRCS:%.cpp=$(OBJDIR)/%.o)
@@ -32,7 +34,9 @@ DEPS = RequestBody.hpp \
 	   Client/RequestHandler.hpp \
 	   Client/RequestParser.hpp \
 	   Client/ResponseBuilder.hpp \
-	   cgi/CgiRequest.hpp
+	   cgi/CgiRequest.hpp \
+	   cgi/CgiResponse.hpp \
+	   cgi/CgiExecutor.hpp
 
 all: $(NAME)
 

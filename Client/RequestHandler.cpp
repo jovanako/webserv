@@ -111,7 +111,7 @@ int RequestHandler::processRequest(const HttpRequest& request, HttpResponse& res
 	}
 }*/
 
-const LocationConfig* RequestHandler::findMatchingLocation(const ServerConfig& server, std::string& uri) const {
+const LocationConfig* RequestHandler::findMatchingLocation(const ServerConfig& server, const std::string& uri) const {
 	const LocationConfig* matchedLocation = NULL;
 	size_t longestMatch = 0;
 
@@ -153,17 +153,14 @@ int RequestHandler::handleRedirect(const LocationConfig& location, HttpResponse&
 	//buildErrorResponse(500);
 	return 500;
 }
+
 bool		RequestHandler::tryCgiHandler(const LocationConfig& location, const std::string& uri) const {
 	std::string scriptName = location.resolveScriptName(uri);
-	std::string handler = location.getCgiHandler(scriptName);
-	if (handler.empty()) {
+	if (scriptName.empty()) {
 		return false;
 	}
-
-	char* const argv[] = {NULL};
-	char* const envp[] = {NULL};
-	execve(handler.c_str(), argv, envp); // TO DO fork() ...
-	return true;
+	std::string handler = location.getCgiHandler(scriptName);
+	return !handler.empty();
 }
 
 int		RequestHandler::dispatchMethod(const LocationConfig& location, const std::string& method, const std::string& fullPath, const std::string& uri, const HttpRequest& request, HttpResponse& response) const {

@@ -6,6 +6,9 @@
 #include "RequestHandler.hpp"
 #include "ResponseBuilder.hpp"
 #include "../ServerConfig.hpp"
+#include "../cgi/CgiRequest.hpp"
+#include "../cgi/CgiResponse.hpp"
+#include "../cgi/CgiExecutor.hpp"
 #include <sys/socket.h>
 #include <unistd.h>
 #include <cstdio>
@@ -34,6 +37,7 @@ class Client {
 		RequestHandler				_handler;
 		ResponseBuilder				_responseBuilder;
 		HttpResponse        		_response;
+		CgiExecutor					_cgiExecutor;
 		ServerConfig				_server;
 		//std::string					_readBuffer;
 		std::vector<char>			_writeBuffer;
@@ -61,10 +65,10 @@ class Client {
 		//void		applyErrorResponseBody(const std::string& body,
 			//const std::string& mimeType);
 		void		handleWriteResponse();
-		void		handleCgiPipeWait();
 		//bool		shouldKeepAlive() const;
 		void		finalizeResponse();
 		void		resetForNextRequest();
+		bool		startCgiExecution();
 
 		/*int			handleGet(const LocationConfig& matchedLocation, std::string fullPath, const std::string uri);
 		bool		findIndexFile(const LocationConfig& matchedLocation,
@@ -106,6 +110,9 @@ class Client {
 		void handleRead();
 		void handleWrite();
 		void handleProcessing();
+		void handleCgiPipeWait();
+		void handleCgiTimeout();
+		void cleanupCgi();
 		void handleDone();
 		
 		//void buildErrorResponse(int statusCode);
@@ -113,6 +120,8 @@ class Client {
 
 		ConnectionState						getClientState() const;
 		int									getSocketFd() const;
+		int									getCgiPipeFd() const;
+		bool								hasCgiTimedOut() const;
 		const ServerConfig&					getServer() const;
 		const std::vector<ServerConfig>&	getVirtualHosts() const;
 		const std::string&					getClientIp() const;

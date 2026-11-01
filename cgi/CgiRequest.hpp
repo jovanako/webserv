@@ -16,6 +16,7 @@ class CgiRequest {
 	private:
 		std::string					_executable;
 		std::string					_scriptPath;
+		std::string					_scriptFileName;
 		std::string					_workingDirectory;
 		std::vector<std::string>	_envVars;
 		const RequestBody&			_body;
