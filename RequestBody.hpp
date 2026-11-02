@@ -5,6 +5,7 @@
 #include <fstream>
 #include <sstream>
 #include <cstdio>
+#include <ctime>
 #include <unistd.h>
 #include <fcntl.h>
 
