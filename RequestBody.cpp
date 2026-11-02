@@ -36,7 +36,7 @@ bool RequestBody::openTempFile() {
 	}
 
 	std::ostringstream oss;
-	oss << "/tmp/webserv_body_" << getpid() << "_" << ++_fileCounter;
+	oss << "/tmp/webserv_body_" << std::time(NULL) << "_" << ++_fileCounter;
 	_filePath = oss.str();
 
 	_fd = open(_filePath.c_str(), O_CREAT | O_TRUNC | O_RDWR, 0600);
