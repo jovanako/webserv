@@ -143,19 +143,13 @@ bool Client::findHeaderEnd(size_t& headerEnd) const {
 bool Client::readHeaderChunk() {
 	char buf[BUFFER_SIZE];
 	ssize_t bytesRead = recv(_socketFd, buf, sizeof(buf), 0);
-	if (bytesRead < 0) {
-		// if there's simply no data right now, don't close the connection
-		// just return and let poll() wait for the next event
-		if (errno == EAGAIN || errno == EWOULDBLOCK) {
-			return false;
-		}
 
-		// for actual network errors (e.g., ECONNRESET), mark as done to trigger cleanup
-		std::cerr << "Read error on fd " << _socketFd << " (errno: " << errno << ")\n";
-		_clientState = DONE;
-		return false;
-	} else if (bytesRead == 0) {
-		std::cout << "Client disconnected on fd " << _socketFd << "\n";
+	if (bytesRead <= 0) {
+		if (bytesRead < 0) {
+			std::cerr << "Read error on fd " << _socketFd << "\n";
+		} else {
+			std::cerr << "Client disconnected on fd " << _socketFd << "\n";
+		}
 		_clientState = DONE;
 		return false;
 	}
@@ -337,18 +331,12 @@ bool Client::readBodyChunk() {
 	char buf[BUFFER_SIZE];
 	ssize_t bytesRead = recv(_socketFd, buf, sizeof(buf), 0);
 		
-	if (bytesRead < 0) {
-		// if there's simply no data right now, don't close the connection
-		// just return and let poll() wait for the next event
-		if (errno == EAGAIN || errno == EWOULDBLOCK) {
-			return false;
+	if (bytesRead <= 0) {
+		if (bytesRead < 0) {
+			std::cerr << "Read error on fd " << _socketFd << "\n";
+		} else {
+			std::cerr << "Client disconnected on fd " << _socketFd << "\n";
 		}
-		// for actual network errors (e.g., ECONNRESET), mark as done to trigger cleanup
-		std::cerr << "Read error on fd " << _socketFd << " (errno: " << errno << ")\n";
-		_clientState = DONE;
-		return false;
-	} else if (bytesRead == 0) {
-		std::cout << "Client disconnected on fd " << _socketFd << "\n";
 		_clientState = DONE;
 		return false;
 	}
