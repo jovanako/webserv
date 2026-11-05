@@ -1,5 +1,5 @@
 #include "LocationConfig.hpp"
-// Default constructor
+
 LocationConfig::LocationConfig()
     : _path(""),
       _root(""),

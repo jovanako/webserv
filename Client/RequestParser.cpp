@@ -45,11 +45,8 @@ bool RequestParser::hasHeaderEnd(size_t& headerEnd) const {
 }
 
 bool RequestParser::parseRequestLineParts(const std::string& requestLine,
-        std::string& method, std::string& uri, std::string& version) const {
-    // 2. Parse the request line safely using a string stream
-    // This automatically handles spaces and prevents out-of-bounds crashes
+    std::string& method, std::string& uri, std::string& version) const {
     std::istringstream stream(requestLine);
-    // check in the 42 rules if this multiple declaration is ok
     if (!(stream >> method >> uri >> version)) {
         return false;
     }
@@ -70,15 +67,13 @@ bool RequestParser::applyRequestLine(const std::string& method, const std::strin
         _request.setVersion(version);
         response.setVersion(version);
     } else {
-        response.setStatusCode(505); // HTTP version not supported
+        response.setStatusCode(505);
         _request.setRequestState(HttpRequest::PARSE_ERROR);
-        //finalizeResponse();
         return false;
     }
 
     if (_request.getRequestState() == HttpRequest::PARSE_ERROR) {
         response.setStatusCode(_request.getErrorCode());
-        //finalizeResponse();
         return false;
     }
 
@@ -88,18 +83,15 @@ bool RequestParser::applyRequestLine(const std::string& method, const std::strin
     
 
 bool RequestParser::parseRequestLine(size_t& firstLineEnd, HttpResponse& response) {
-    // 1. Find the end of the first line
     firstLineEnd = _readBuffer.find("\r\n");
-    if (firstLineEnd == std::string::npos) return false; // Safety check
+    if (firstLineEnd == std::string::npos) return false;
 
-    // Extract just the request line (excluding the \r\n)
     std::string requestLine = _readBuffer.substr(0, firstLineEnd);
     std::string method;
     std::string uri;
     std::string version;
     if (!parseRequestLineParts(requestLine, method, uri, version)) {
-        response.setStatusCode(400); // Bad Request
-        //finalizeResponse();
+        response.setStatusCode(400);
         return false;
     }
 
@@ -107,7 +99,6 @@ bool RequestParser::parseRequestLine(size_t& firstLineEnd, HttpResponse& respons
 }
 
 static void trimHeaderValue(std::string& value) {
-    // Trim leading and trailing spaces from the value
     size_t valueStart = value.find_first_not_of(" \t");
     if (valueStart == std::string::npos) {
         value.clear();
@@ -123,14 +114,12 @@ bool RequestParser::storeParsedHeader(const std::string& key,
     _request.addHeader(key, value);
     if (_request.getRequestState() == HttpRequest::PARSE_ERROR) {
         response.setStatusCode(_request.getErrorCode());
-        //finalizeResponse();
         return false;
     }
     return true;
 }
 
 bool RequestParser::parseHeaderLine(const std::string& line, HttpResponse& response) {
-    // Find the colon in this specific line
     size_t colonPos = line.find(':');
     if (colonPos == std::string::npos) {
         return true;
@@ -149,33 +138,28 @@ bool RequestParser::parseHeaders(HttpResponse& response) {
         return false;
     }
 
-    // 3. Parse the headers line by line
     size_t lineStart = firstLineEnd + 2;
     size_t headerBlockEnd = _readBuffer.find("\r\n\r\n");
 
     while (lineStart < headerBlockEnd) {
-        // Find the end of the current line
         size_t lineEnd = _readBuffer.find("\r\n", lineStart);
         if (lineEnd == std::string::npos) break;
 
-        // Extract the single line
         std::string line = _readBuffer.substr(lineStart, lineEnd - lineStart);
 
         if (!parseHeaderLine(line, response)) {
             return false;
         }
 
-        // Move to the next line
         lineStart = lineEnd + 2;
     }
     return true;
 }
 
 bool RequestParser::readChunkSize(size_t& lineEnd, size_t& chunkSize, HttpResponse& response) {
-    // find the end of the chunk size line
     lineEnd = _readBuffer.find("\r\n");
     if (lineEnd == std::string::npos) {
-        return false; // wait for more data to arrive
+        return false;
     }
 
     // extract chunk size (and ignore potential chunk extensions starting with ';')
@@ -185,12 +169,10 @@ bool RequestParser::readChunkSize(size_t& lineEnd, size_t& chunkSize, HttpRespon
         hexSize = hexSize.substr(0, semiPos);
     }
 
-    // convert chunk size to integer
     std::stringstream stream;
     stream << std::hex << hexSize;
     if (!(stream >> chunkSize)) {
         response.setStatusCode(400);
-        //buildErrorResponse(400); // bad request
         return false;
     }
     return true;
@@ -214,10 +196,9 @@ bool RequestParser::finishChunkedBody(size_t chunkLineEnd, HttpResponse& respons
 bool RequestParser::appendChunkData(size_t chunkLineEnd, size_t chunkSize, HttpResponse& response) {
     // check if the entire chunk data + trailing "\r\n" has been received
     if (_readBuffer.length() < chunkLineEnd + 2 + chunkSize + 2) {
-        return false; // wait for the rest of the chunk
+        return false;
     }
 
-    // append the chunk data to the request
     if (!_request.appendBody(_readBuffer.data() + chunkLineEnd + 2, chunkSize)) {
         response.setStatusCode(500);
         return false;
@@ -251,7 +232,6 @@ bool RequestParser::processFixedLengthBody(const ServerConfig& server, HttpRespo
     size_t contentLen = _request.getContentLength();
 
     if (_readBuffer.length() > server.getClientMaxBodySize()) {
-        //buildErrorResponse(413); // pazload too large
         response.setStatusCode(413);
         return false;
     }
@@ -262,7 +242,6 @@ bool RequestParser::processFixedLengthBody(const ServerConfig& server, HttpRespo
             return false;
         }
         _readBuffer.erase(0, contentLen);
-        //_clientState = PROCESSING;
         return true;
     }
     return false;

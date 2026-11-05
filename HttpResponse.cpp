@@ -109,7 +109,6 @@ std::string HttpResponse::buildStatusLine() const {
         version = _version;
     }
     
-    // C++98 compliant integer-to-string conversion
     std::ostringstream oss;
     oss << _statusCode;
     std::string statusCodeStr = oss.str();
@@ -127,7 +126,6 @@ void HttpResponse::appendHeaders(std::vector<char>& response) const {
     response.insert(response.end(), crlf.begin(), crlf.end());
 }
 
-// Converts the object into raw bytes ready to pass to send()
 std::vector<char> HttpResponse::createResponse() const {
     std::vector<char> response;
 

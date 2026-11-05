@@ -30,7 +30,6 @@ HttpRequest& HttpRequest::operator=(const HttpRequest& other){
 
 HttpRequest::~HttpRequest() {}
 
-// Setters
 void HttpRequest::setRequestState(ParsingState state) {
 	_parseState = state;
 }
@@ -45,7 +44,6 @@ void HttpRequest::setRemoteAddr(const std::string& remoteAddr) {
 
 void HttpRequest::setMethod(const std::string& method) {
 	// check for invalid characters (a method token should only contain uppercase letters)
-    // maybe see all methods and check for random words
 	for (size_t i = 0; i < method.length(); ++i) {
         if (method[i] < 'A' || method[i] > 'Z') {
             _errorCode = 400; // 400 Bad Request
@@ -54,7 +52,6 @@ void HttpRequest::setMethod(const std::string& method) {
         }
     }
 
-	// check for supported methods
 	if (method == "GET" || method == "POST" || method == "DELETE") {
 		_method = method;
 	} else {
@@ -75,9 +72,9 @@ static std::string decodePercentEncoding(const std::string& input) {
 			if (iss >> std::hex >> value) {
 				decoded += static_cast<char>(value);
 			}
-			i += 2; // skip over the two hex digits we just processed
+			i += 2;
 		} else {
-			decoded += input[i]; // normal character, just append it 
+			decoded += input[i];
 		}
 	}
 	return decoded;
@@ -160,7 +157,6 @@ void HttpRequest::setContentLength(size_t len) {
 	_contentLength = len;
 }
 
-// Getters
 HttpRequest::ParsingState HttpRequest::getRequestState() const {
 	return _parseState;
 }
@@ -226,11 +222,9 @@ static bool isValidHeaderKey(const std::string& key) {
 	for (size_t i = 0; i < key.length(); ++i) {
 		unsigned char c = static_cast<unsigned char>(key[i]);
 
-		// non-printable ASCII, control chars, and DEL
 		if (c <= 32 || c >= 127)
 			return false;
 
-		// RFC separator chars
 		if (invalidChars.find(static_cast<char>(c)) != std::string::npos)
 			return false;
 	}
@@ -409,7 +403,6 @@ void HttpRequest::addHeader(const std::string& key, const std::string& value) {
 	}
 	std::string lowerKey = toLowerCopy(key);
 
-	// reject if host, content-length or transfer-encoding have duplicates
 	if (isDuplicateRestrictedHeader(lowerKey, _headers)) {
 		return handleError(*this, 400);
 	}
@@ -418,7 +411,6 @@ void HttpRequest::addHeader(const std::string& key, const std::string& value) {
 		return handleError(*this, 400);
 	}
 
-	// a single HTTP request cannot contain both a Content-Length header and a Transfer-Encoding header
 	if (lowerKey == "transfer-encoding") {
 		int errorCode = validateTransferEncoding(value);
 		if (errorCode != 0)

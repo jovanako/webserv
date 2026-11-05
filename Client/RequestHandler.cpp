@@ -14,7 +14,6 @@ RequestHandler& RequestHandler::operator=(const RequestHandler& other) {
 }
 
 std::string RequestHandler::getFileExtension(const std::string& path) {
-    // find the last dot and the last slash
 	size_t dotPos = path.find_last_of('.');
 	size_t slashPos = path.find_last_of('/');
 
@@ -23,7 +22,6 @@ std::string RequestHandler::getFileExtension(const std::string& path) {
 		return "";
 	}
 
-	// extract the extension
 	return path.substr(dotPos);
 }
 
@@ -37,7 +35,6 @@ std::string RequestHandler::lowercaseExtension(const std::string& extension) {
 }
 
 std::string RequestHandler::mimeTypeForExtension(const std::string& extension) {
-    	// Map common extensions
 	if (extension == ".html" || extension == ".htm") return "text/html";
 	if (extension == ".css") return "text/css";
 	if (extension == ".js") return "application/javascript";
@@ -63,7 +60,7 @@ std::string RequestHandler::getMimeType(const std::string& path) {
 	ext = lowercaseExtension(ext);
 	return mimeTypeForExtension(ext);
 }
-//changed a lot
+
 int RequestHandler::processRequest(const HttpRequest& request, HttpResponse& response, const ServerConfig& server) const {
     std::string uri = request.getUri();
 	const LocationConfig* matchedLocation = findMatchingLocation(server, uri);
@@ -85,31 +82,6 @@ int RequestHandler::processRequest(const HttpRequest& request, HttpResponse& res
     std::string fullPath = request.makeFullPath(*matchedLocation);
     return dispatchMethod(*matchedLocation, method, fullPath, uri, request, response);
 }
-    /*bool cgiFlag = false;
-	if (!validateLocation(matchedLocation)) {
-		return;
-	}
-
-	std::string method = request.getMethod();
-	if (!validateMethod(*matchedLocation, method)) {
-		return;
-	}
-
-	if (handleRedirect(*matchedLocation)) {
-		return;
-	}
-
-	cgiFlag = tryCgiHandler(*matchedLocation, uri);
-
-	std::string fullPath = request.makeFullPath(*matchedLocation);
-
-	if (!cgiFlag && !dispatchMethod(*matchedLocation, method, fullPath, uri)) {
-		return;
-	}
-	if (!cgiFlag) {
-		finalizeResponse();
-	}
-}*/
 
 const LocationConfig* RequestHandler::findMatchingLocation(const ServerConfig& server, const std::string& uri) const {
 	const LocationConfig* matchedLocation = NULL;
@@ -144,13 +116,11 @@ int RequestHandler::handleRedirect(const LocationConfig& location, HttpResponse&
 	}
 
 	if (redirect.first >= 300 && redirect.first < 400) {
-		response.setStatusCode(redirect.first); // check if it starts with 3?
+		response.setStatusCode(redirect.first);
 		response.setHeader("Location", redirect.second);
-		//finalizeResponse();
-		return redirect.first; //301, 302 etc
+		return redirect.first;
 	}
 
-	//buildErrorResponse(500);
 	return 500;
 }
 
@@ -165,44 +135,38 @@ bool		RequestHandler::tryCgiHandler(const LocationConfig& location, const std::s
 
 int		RequestHandler::dispatchMethod(const LocationConfig& location, const std::string& method, const std::string& fullPath, const std::string& uri, const HttpRequest& request, HttpResponse& response) const {
 	if (method == "GET") {
-		return handleGet(location, fullPath, uri, response); //!= 0;
+		return handleGet(location, fullPath, uri, response);
 	}
 
 	if (method == "POST") {
 		if (location.getUploadStore() != "") {
-			return handlePost(location, uri, request, response); //!= 0;
+			return handlePost(location, uri, request, response);
 		}
-		//buildErrorResponse(403); // forbidden
 		return 403;
 	}
 
 	if (method == "DELETE") {
-		return handleDelete(fullPath, response); //!= 0;
+		return handleDelete(fullPath, response);
 	}
 	return 405;
 }
 
-int			RequestHandler::handleGet(const LocationConfig& matchedLocation, std::string fullPath, const std::string uri, HttpResponse& response) const {
+int RequestHandler::handleGet(const LocationConfig& matchedLocation, std::string fullPath, const std::string uri, HttpResponse& response) const {
     struct stat pathStat;
 	// check if file exists
 	if (stat(fullPath.c_str(), &pathStat) == 0) {
 		return serveExistingPath(matchedLocation, fullPath, pathStat, uri, response);
-	} /*else {
-		//the path does not exist on disc
-		//buildErrorResponse(404);
-		return 0;
-	}*/
+	}
 	return 404;
 }
 
-int			RequestHandler::handlePost(const LocationConfig& matchedLocation, const std::string uri, const HttpRequest& request, HttpResponse& response) const {
+int	RequestHandler::handlePost(const LocationConfig& matchedLocation, const std::string uri, const HttpRequest& request, HttpResponse& response) const {
 	std::string savePath = buildUploadPath(matchedLocation, uri);
 
-	// open an output file tream in binary mode to prevent corruption
+	// open an output file stream in binary mode to prevent corruption
 	std::ofstream outFile(savePath.c_str(), std::ios::out | std::ios::binary);
 
 	if (!outFile.is_open()) {
-		//buildErrorResponse(403); // forbidden
 		return 403;
 	}
 
@@ -215,21 +179,17 @@ int			RequestHandler::handlePost(const LocationConfig& matchedLocation, const st
 	return 201;
 }
 
-int			RequestHandler::handleDelete(const std::string& fullPath, HttpResponse& response) const {
+int	RequestHandler::handleDelete(const std::string& fullPath, HttpResponse& response) const {
     // std::remove returns 0 on success, and non-zero on failure
 	if (std::remove(fullPath.c_str()) == 0) {
-		response.setStatusCode(204); // 204 no content
+		response.setStatusCode(204);
 		response.setHeader("Content-Length", "0");
         return 204;
-	} /*else {
-		buildErrorResponse(403); // deletion failed (file doesn't exist or no permission)
-		return 0;
-	}*/
+	}
 	return 403;
 }
 
-bool		RequestHandler::findIndexFile(const LocationConfig& matchedLocation, std::string& fullPath, struct stat& pathStat) const {
-	// search for an index file
+bool RequestHandler::findIndexFile(const LocationConfig& matchedLocation, std::string& fullPath, struct stat& pathStat) const {
 	const std::vector<std::string>& indices = matchedLocation.getIndex();
 	for (size_t i = 0; i < indices.size(); ++i) {
 		std::string indexPath = fullPath + indices[i];
@@ -255,7 +215,6 @@ static std::string autoindexBaseUri(const std::string& requestUri) {
 
 static void appendAutoindexHeader(std::ostringstream& html,
 	const std::string& requestUri) {
-	// skeleton of HTML
 	html << "<!DOCTYPE html>\n"
 		 << "<html>\n<head>\n"
 		 << "<title>Index of " << requestUri << "</title>\n"
@@ -284,7 +243,7 @@ static void appendAutoindexFooter(std::ostringstream& html) {
 static std::string generateAutoindex(const std::string& fullPath, const std::string& requestUri) {
 	DIR* dir = opendir(fullPath.c_str());
 	if(dir == NULL) {
-		return (""); //this will be a 403
+		return ("");
 	}
 
 	std::ostringstream html;
@@ -296,17 +255,15 @@ static std::string generateAutoindex(const std::string& fullPath, const std::str
 
 	return html.str();
 }
-//changed a lot
-int		    RequestHandler::serveAutoindex(const LocationConfig& matchedLocation, const std::string& fullPath, const std::string& uri, HttpResponse& response) const {
+
+int RequestHandler::serveAutoindex(const LocationConfig& matchedLocation, const std::string& fullPath, const std::string& uri, HttpResponse& response) const {
     if (!matchedLocation.getAutoindex()) {
-		//buildErrorResponse(403);
 		return 403;
 	}
 
 	std::string htmlBody = generateAutoindex(fullPath, uri);
 	// opendir failed (likely due to permissions)
 	if (htmlBody.empty()) {
-		//buildErrorResponse(403);
 		return 403;
 	}
 
@@ -322,12 +279,11 @@ int		    RequestHandler::serveAutoindex(const LocationConfig& matchedLocation, c
 	return 200;
 }
 
-int		    RequestHandler::serveFile(const std::string& fullPath, HttpResponse& response) const {
+int RequestHandler::serveFile(const std::string& fullPath, HttpResponse& response) const {
 	// std::ios::in mode flag telling the stream to open file for reading (input)
 	// std::ios::binary mode flag that forces C++ to read the file byte-by-byte (not in text mode)
 	std::ifstream file(fullPath.c_str(), std::ios::in | std::ios::binary);
 	if (!file.is_open()) {
-		//buildErrorResponse(403);
 		return 403;
 	}
 
@@ -342,25 +298,22 @@ int		    RequestHandler::serveFile(const std::string& fullPath, HttpResponse& re
 	std::ostringstream lengthStream;
 	lengthStream << fileContent.length();
 	response.setHeader("Content-Length", lengthStream.str());
-	// mime-type logic
 	response.setHeader("Content-Type", getMimeType(fullPath));
-	return 200; //walk me through this change
+	return 200;
 }
 
-int	    RequestHandler::redirectDirectoryRequest(const std::string& uri, HttpResponse& response) const {
-    	// enforce trailing slash on the URI
+int RequestHandler::redirectDirectoryRequest(const std::string& uri, HttpResponse& response) const {
+    // enforce trailing slash on the URI
 	if (uri.empty() || uri[uri.length() - 1] == '/') {
 		return 0;
 	}
 
 	response.setStatusCode(301);
 	response.setHeader("Location", uri + "/");
-	//buildErrorResponse(301); // moved permanently
 	return 301;
 }
 
-int		    RequestHandler::serveExistingPath(const LocationConfig& matchedLocation, std::string& fullPath, struct stat& pathStat, const std::string& uri, HttpResponse& response) const {
-	//bool isFileToServe = false;
+int RequestHandler::serveExistingPath(const LocationConfig& matchedLocation, std::string& fullPath, struct stat& pathStat, const std::string& uri, HttpResponse& response) const {
 	// check if it's a directory
 	if (S_ISDIR(pathStat.st_mode)) {
         int redirect = redirectDirectoryRequest(uri, response);
@@ -370,12 +323,10 @@ int		    RequestHandler::serveExistingPath(const LocationConfig& matchedLocation
 		if (!findIndexFile(matchedLocation, fullPath, pathStat)) {
 			return serveAutoindex(matchedLocation, fullPath, uri, response);
 		}
-		//isFileToServe = true; //doesnt getting rid of the variable actually change what we are returning?
 	} if (S_ISREG(pathStat.st_mode)) {
 		return serveFile(fullPath, response);
 	}
 
-	//buildErrorResponse(403);
 	return 403;
 }
 
@@ -392,11 +343,10 @@ std::string RequestHandler::buildUploadPath(const LocationConfig& matchedLocatio
 	return matchedLocation.getUploadStore() + filename;
 }
 
-bool	    RequestHandler::writeUploadBody(std::ofstream& outFile, const std::string& savePath, const HttpRequest& request) const {
+bool RequestHandler::writeUploadBody(std::ofstream& outFile, const std::string& savePath, const HttpRequest& request) const {
 	if (!request.getBody().writeTo(outFile)) {
 		outFile.close();
 		std::remove(savePath.c_str());
-		//buildErrorResponse(500); // internal server error
 		return false;
 	}
 	return true;

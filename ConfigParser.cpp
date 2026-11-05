@@ -71,10 +71,9 @@ std::string ConfigParser::getNextToken() {
 
 void ConfigParser::parseListenTarget(const std::string& token,
 	std::string& host, std::string& portStr) const {
-	host = "0.0.0.0"; // default host if none is provided
+	host = "0.0.0.0";
 	portStr = token;
 
-	// check if the token contains a colon (interface:port)
 	size_t colonPos = token.find(':');
 	if (colonPos != std::string::npos) {
 		host = token.substr(0, colonPos);
@@ -83,12 +82,11 @@ void ConfigParser::parseListenTarget(const std::string& token,
 	// check if the token is just an IP address (contains dots but no colon)
 	else if (token.find('.') != std::string::npos) {
 		host = token;
-		portStr = "80"; // default HTTP port
+		portStr = "80";
 	}
 }
 
 int ConfigParser::parseListenPort(const std::string& portStr) const {
-	// validate that the port string is not empty and contains only digits
 	if (portStr.empty()) {
 		throw std::runtime_error("Config Error: Missing port in listen directive");
 	}
@@ -97,9 +95,11 @@ int ConfigParser::parseListenPort(const std::string& portStr) const {
 			throw std::runtime_error("Config Error: Invalid port '" + portStr + "'");
 		}
 	}
-
-	// convert and validate port range (1 - 65535)
-	int port = std::atoi(portStr.c_str()); // fix with strtol()
+	if (portStr.length() > 5) {
+		throw std::runtime_error("Config Error: Port out of range '" + portStr + "'");
+	}
+	
+	int port = std::atoi(portStr.c_str());
 	if (port < 1 || port > 65535) {
 		throw std::runtime_error("Config Error: Port out of range '" + portStr + "'");
 	}
@@ -113,7 +113,6 @@ void ConfigParser::parseListenDirective(ServerConfig& server) {
 	parseListenTarget(token, host, portStr);
 	int port = parseListenPort(portStr);
 
-	// save both to the ServerConfig object
 	server.setHost(host);
 	server.setPort(port);
 	verifyToken(";");
@@ -194,7 +193,6 @@ void ConfigParser::addErrorPageCodes(ServerConfig& server,
 	const std::vector<std::string>& args, const std::string& errorPath) {
 	// all preceding arguments are the status codes
 	for (size_t i = 0; i < args.size() - 1; ++i) {
-		// ensure the status code contains only digits
 		for (size_t j = 0; j < args[i].length(); ++j) {
 			if (!std::isdigit(static_cast<unsigned char>(args[i][j]))) {
 				throw std::runtime_error("Config Error: Invalid error_page status code '" + args[i] + "'");
@@ -232,7 +230,6 @@ void ConfigParser::parseLocationMethods(LocationConfig& location) {
 	while (_currentTokenIndex < _tokens.size() && _tokens[_currentTokenIndex] != ";") {
 		std::string method = getNextToken();
 
-		// validate against supported HTTP methods
 		if (method != "GET" && method != "POST" && method != "DELETE") {
 			throw std::runtime_error("ConfigError: Invalid or unsupported method '" + method + "' in allow_methods directive");
 		}

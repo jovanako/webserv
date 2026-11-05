@@ -5,7 +5,7 @@
 #include <vector>
 #include <map>
 #include <sstream>
-#include "LocationConfig.hpp" // Assumes you have this defined
+#include "LocationConfig.hpp"
 
 class ServerConfig {
 	private:
@@ -17,13 +17,11 @@ class ServerConfig {
 		std::vector<LocationConfig>         _locations;
 
 	public:
-		// Default constructor
 		ServerConfig();
 		ServerConfig(const ServerConfig& other);
 		ServerConfig& operator=(const ServerConfig& other);
 		~ServerConfig();
 		
-		// Getters (used by request handler to make routing decisions)
 		const std::string&                  getHost() const;
 		int                                 getPort() const;
 		std::string							getPortString() const;
@@ -32,7 +30,6 @@ class ServerConfig {
 		size_t                              getClientMaxBodySize() const;
 		const std::vector<LocationConfig>&  getLocations() const;
 
-		// Setters (used by config file parser)
 		void setHost(const std::string& host);
 		void setPort(int port);
 		void setClientMaxBodySize(size_t size);

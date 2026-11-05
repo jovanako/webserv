@@ -53,7 +53,6 @@ void ResponseBuilder::applyErrorResponseBody(HttpResponse& response, const std::
 	const std::string& mimeType) {
 	response.setHeader("Content-Type", mimeType);
 	response.setBody(body);
-	//finalizeResponse();
 }
 
 void ResponseBuilder::buildErrorResponse(int statusCode, HttpResponse& response, const ServerConfig& server, const HttpRequest& request) {
@@ -104,6 +103,4 @@ void ResponseBuilder::buildResponse(HttpResponse& response, const HttpRequest& r
 	std::ostringstream oss;
 	oss << response.getBody().size();
 	response.setHeader("Content-Length", oss.str());
-
-	//setClientState(WRITING_RESPONSE); why delete this
 }

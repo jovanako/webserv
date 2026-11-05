@@ -190,7 +190,6 @@ bool ServerManager::handleClientInput(size_t pollIndex, int clientFd, Client& cl
 
 void ServerManager::processClient(int clientFd, Client& client,
 	std::vector<struct pollfd>& pendingFds) {
-	// perform route matching and preparation if reading is complete
 	if (client.getClientState() == Client::PROCESSING) {
 		client.handleProcessing();
 		if (client.getClientState() == Client::CGI_PIPE_WAIT) {
