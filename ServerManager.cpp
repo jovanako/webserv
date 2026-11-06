@@ -20,7 +20,15 @@ ServerManager& ServerManager::operator=(const ServerManager& other) {
 	return *this;
 }
 
-ServerManager::~ServerManager() {}
+ServerManager::~ServerManager() {
+	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
+		it->second.cleanupCgi();
+		close(it->first);
+	}
+	for (std::map<int, size_t>::iterator it = _listenSockets.begin(); it != _listenSockets.end(); ++it) {
+		close(it->first);
+	}
+}
 
 static std::string ipv4ToString(const struct sockaddr_in& clientAddr) {
 	uint32_t ip = ntohl(clientAddr.sin_addr.s_addr);
@@ -41,11 +49,7 @@ int ServerManager::acceptConnection(int listenFd, std::string& clientIp) {
 	int clientFd = accept(listenFd, reinterpret_cast<struct sockaddr*>(&clientAddr), &addrLen);
 	// if there are no pending connections, return to the polling loop
 	if (clientFd < 0) {
-		if (errno != EAGAIN && errno != EWOULDBLOCK) {
-			// log the actual error, but do NOT exit the program
-			std::cerr << "Error: accept() failed for listenFd " << listenFd
-					  << " (errno: " << errno << ")\n";
-		}
+		std::cerr << "Error: accept() failed for listenFd " << listenFd << "\n";
 		return -1; // safely exit the function to keep the server loop running
 	}
 	clientIp = ipv4ToString(clientAddr);
@@ -269,6 +273,18 @@ void ServerManager::checkCgiTimeouts() {
 	}
 }
 
+void ServerManager::checkClientTimeouts() {
+	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ) {
+		if (it->second.clientHasTimedOut()) {
+			int clientFd = it->first;
+			++it;
+			removeClient(clientFd);
+		} else {
+			++it;
+		}
+	}
+}
+
 bool ServerManager::handleClientEvent(size_t pollIndex,
 	std::vector<struct pollfd>& pendingFds) {
 	int currentFd = _pollFds[pollIndex].fd;
@@ -418,11 +434,11 @@ void ServerManager::initServers() {
 		std::string portStr = _servers[i].getPortString();
 		int listenFd = createListeningSocket(_servers[i], serverInfo);
 		if (listenFd < 0) {
-			continue;
+			throw std::runtime_error("Failed to create listening socket");
 		}
 		
 		if (!configureListeningSocket(listenFd, serverInfo, host, port, portStr)) {
-			continue;
+			throw std::runtime_error("Failed to configure listening socket");
 		}
 
 		registerListeningSocket(listenFd, i, host, port, boundAddresses);
@@ -518,6 +534,7 @@ void ServerManager::run() {
 
 		processPollEvents(pendingFds);
 		checkCgiTimeouts();
+		checkClientTimeouts();
 		addPendingClients(pendingFds);
 	}
 }

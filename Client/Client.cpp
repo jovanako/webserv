@@ -97,7 +97,7 @@ bool Client::getHostHeaderValue(std::string& hostValue) {
 	std::map<std::string, std::string>::const_iterator it = headers.find("host");
 	if (it == headers.end()) {
 		_response.setStatusCode(400); // 400 Bad Request strictly required for HTTP/1.1
-		finalizeResponse();
+		setupErrorResponse(_response.getStatusCode());
 		return false;
 	}
 
@@ -172,7 +172,7 @@ void Client::handleReadHeader() {
 	if(_parser.hasHeaderEnd(headerEnd)) {
 		if(!_parser.parseHeaders(_response)) {
 			if (_response.getStatusCode() >= 400) {
-				finalizeResponse();
+				setupErrorResponse(_response.getStatusCode());
 			}
 			return;
 		}
@@ -183,10 +183,9 @@ void Client::handleReadHeader() {
 	
 		if (_parser.getRequest().getContentLength() > _server.getClientMaxBodySize()) {
 			_response.setStatusCode(413); // 413 Payload too large error
-			finalizeResponse();
+			setupErrorResponse(_response.getStatusCode());
 			return;
 		}
-
 
 		prepareRequestBody(headerEnd);
 	}
@@ -222,7 +221,7 @@ void Client::handleReadBody() {
 	if(finishedParsing) {
 		_clientState = PROCESSING;
 	} else if (_response.getStatusCode() >= 400) {
-		finalizeResponse();
+		setupErrorResponse(_response.getStatusCode());
 	}
 }
 
@@ -389,4 +388,3 @@ bool Client::clientHasTimedOut() const {
 	}
 	return (std::time(NULL) - _lastActivity) >= CLIENT_TIMEOUT_SEC;
 }
-

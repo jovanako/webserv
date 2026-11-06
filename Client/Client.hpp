@@ -60,9 +60,8 @@ class Client {
 		void		finalizeResponse();
 		void		resetForNextRequest();
 		bool		startCgiExecution();
-		bool		clientHasTimedOut() const;
-
-	public:
+		
+		public:
 		Client();
 		Client(int fd);
 		Client(const Client& other);
@@ -76,6 +75,7 @@ class Client {
 		void handleCgiTimeout();
 		void cleanupCgi();
 		void handleDone();
+		bool clientHasTimedOut() const;
 		
 		void setupErrorResponse(int statusCode);
 

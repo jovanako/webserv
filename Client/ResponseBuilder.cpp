@@ -49,12 +49,6 @@ std::string ResponseBuilder::createDefaultErrorPage(int statusCode, const HttpRe
 	return stream.str();
 }
 
-void ResponseBuilder::applyErrorResponseBody(HttpResponse& response, const std::string& body,
-	const std::string& mimeType) {
-	response.setHeader("Content-Type", mimeType);
-	response.setBody(body);
-}
-
 void ResponseBuilder::buildErrorResponse(int statusCode, HttpResponse& response, const ServerConfig& server, const HttpRequest& request) {
 	response.setStatusCode(statusCode);
 
@@ -64,7 +58,8 @@ void ResponseBuilder::buildErrorResponse(int statusCode, HttpResponse& response,
 		body = createDefaultErrorPage(statusCode, response);
     }
 
-	applyErrorResponseBody(response, body, mimeType);
+	response.setHeader("Content-Type", mimeType);
+	response.setBody(body);
 
     buildResponse(response, request);
 }

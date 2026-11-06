@@ -38,6 +38,7 @@ class ServerManager {
 		void syncClientPollEventsByFd(int clientFd, const Client& client);
 		bool handleCgiPipeEvent(size_t pollIndex);
 		void checkCgiTimeouts();
+		void checkClientTimeouts();
 		bool handleClientEvent(size_t pollIndex, std::vector<struct pollfd>& pendingFds);
 		bool handleClientInput(size_t pollIndex, int clientFd, Client& client);
 		bool removeCompletedClient(int clientFd, Client& client);
