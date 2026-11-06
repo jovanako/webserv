@@ -89,10 +89,20 @@ const LocationConfig* RequestHandler::findMatchingLocation(const ServerConfig& s
 
 	const std::vector<LocationConfig>& locations = server.getLocations();
 	for (std::vector<LocationConfig>::const_iterator it = locations.begin(); it != locations.end(); ++it) {
+		
 		std::string locPath = it->getPath();
+
 		if (uri.find(locPath) == 0 && locPath.length() > longestMatch) {
-			longestMatch = locPath.length();
-			matchedLocation = &(*it);
+
+			bool isValidMatch = (locPath == "/") ||
+								(uri.length() == locPath.length()) ||
+								(locPath[locPath.length() - 1] == '/') ||
+								(uri[locPath.length()] == '/');
+			
+			if (isValidMatch) {
+				longestMatch = locPath.length();
+				matchedLocation = &(*it);
+			}
 		}
 	}
 	return matchedLocation;
@@ -180,7 +190,12 @@ int	RequestHandler::handlePost(const LocationConfig& matchedLocation, const std:
 }
 
 int	RequestHandler::handleDelete(const std::string& fullPath, HttpResponse& response) const {
-    // std::remove returns 0 on success, and non-zero on failure
+	struct stat pathStat;
+	// check if file exists
+	if (stat(fullPath.c_str(), &pathStat) < 0) {
+		return 404; // Not found
+	}
+		// std::remove returns 0 on success, and non-zero on failure
 	if (std::remove(fullPath.c_str()) == 0) {
 		response.setStatusCode(204);
 		response.setHeader("Content-Length", "0");

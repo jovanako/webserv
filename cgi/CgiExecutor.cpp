@@ -242,11 +242,11 @@ bool CgiExecutor::readOutput() {
 	return false;
 }
 
-bool CgiExecutor::hasTimedOut(time_t timeoutSec) const {
+bool CgiExecutor::cgiHasTimedOut() const {
 	if (_state != CGI_RUNNING) {
 		return false;
 	}
-	return (std::time(NULL) - _startTime) >= timeoutSec;
+	return (std::time(NULL) - _startTime) >= DEFAULT_TIMEOUT_SEC;
 }
 
 void CgiExecutor::handleTimeout() {

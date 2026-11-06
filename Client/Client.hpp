@@ -16,6 +16,7 @@
 #include <fstream>
 #include <dirent.h>
 #include <iostream>
+#include <ctime>
 
 class Client {
 	public:
@@ -27,7 +28,8 @@ class Client {
 			CGI_PIPE_WAIT,
 			DONE
 		};
-
+		static const time_t			CLIENT_TIMEOUT_SEC = 30;
+		
 	private:
 		static const int			BUFFER_SIZE = 4096;
 		int                 		_socketFd;
@@ -42,6 +44,7 @@ class Client {
 		size_t						_bytesSent;
 		std::vector<ServerConfig>	_virtualHosts;
 		std::string					_clientIp;
+		time_t						_lastActivity;
 
 		void		handleReadHeader();
 		bool		readChunk();
@@ -57,6 +60,7 @@ class Client {
 		void		finalizeResponse();
 		void		resetForNextRequest();
 		bool		startCgiExecution();
+		bool		clientHasTimedOut() const;
 
 	public:
 		Client();

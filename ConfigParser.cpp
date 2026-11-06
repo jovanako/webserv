@@ -329,6 +329,13 @@ void ConfigParser::parseLocationBlock(ServerConfig &server) {
 
 	if (!index_present)
 		location.addIndex("index.html");
+
+	if (location.getAllowedMethods().empty()) {
+		// if not specified, allow these three
+		location.addAllowedMethod("GET");
+		location.addAllowedMethod("POST");
+		location.addAllowedMethod("DELETE");
+	}
 		
 	server.addLocation(location);
 }

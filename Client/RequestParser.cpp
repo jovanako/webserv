@@ -209,14 +209,18 @@ bool RequestParser::appendChunkData(size_t chunkLineEnd, size_t chunkSize, HttpR
     return true;
 }
 
-bool RequestParser::parseChunkedBody(HttpResponse& response) {
-    while (true) {
+bool RequestParser::parseChunkedBody(HttpResponse& response, ServerConfig& server) {
+	while (true) {
         size_t pos;
         size_t chunkSize;
         if (!readChunkSize(pos, chunkSize, response)) {
             return false;
         }
 
+		if (chunkSize > (server.getClientMaxBodySize() - _request.getBody().getSize())) {
+			response.setStatusCode(413);
+			return false;
+		}
         // a chunk size of 0 indicates the end of the request body
         if (chunkSize == 0) {
             return finishChunkedBody(pos, response); // wait for final "\r\n" if not fully received yet

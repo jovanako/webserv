@@ -5,14 +5,17 @@ Client::Client()
 	: _socketFd(-1),
 	  _clientState(READING_HEADER),
 	  _bytesSent(0),
-	  _clientIp("")
-  {}
+	  _clientIp(""),
+	  _lastActivity(std::time(NULL))
+	  {}
 
 Client::Client(int fd)
 	: _socketFd(fd),
 	  _clientState(READING_HEADER),
 	  _bytesSent(0),
-	  _clientIp("") {}
+	  _clientIp(""),
+	  _lastActivity(std::time(NULL))
+	  {}
 
 Client::Client(const Client& other) {
 	*this = other;
@@ -33,6 +36,7 @@ Client& Client::operator=(const Client& other) {
 		_bytesSent = other._bytesSent;
 		_virtualHosts = other._virtualHosts;
 		_clientIp = other._clientIp;
+		_lastActivity = other._lastActivity;
 	}
 	return *this;
 }
@@ -52,7 +56,7 @@ int Client::getCgiPipeFd() const {
 }
 
 bool Client::hasCgiTimedOut() const {
-	return _clientState == CGI_PIPE_WAIT && _cgiExecutor.hasTimedOut();
+	return _clientState == CGI_PIPE_WAIT && _cgiExecutor.cgiHasTimedOut();
 }
 
 const ServerConfig& Client::getServer() const {
@@ -172,6 +176,10 @@ void Client::handleReadHeader() {
 			}
 			return;
 		}
+		
+		if (!selectVirtualHost()) {
+			return;
+		}
 	
 		if (_parser.getRequest().getContentLength() > _server.getClientMaxBodySize()) {
 			_response.setStatusCode(413); // 413 Payload too large error
@@ -179,9 +187,6 @@ void Client::handleReadHeader() {
 			return;
 		}
 
-		if (!selectVirtualHost()) {
-			return;
-		}
 
 		prepareRequestBody(headerEnd);
 	}
@@ -201,6 +206,7 @@ bool Client::readChunk() {
 		return false;
 	}
 
+	_lastActivity = std::time(NULL);
 	_parser.appendData(buf, bytesRead);
 	return true;
 }
@@ -208,7 +214,7 @@ bool Client::readChunk() {
 void Client::handleReadBody() {
 	bool finishedParsing = false;
 	if (_parser.getRequest().isChunked()) {
-		finishedParsing = _parser.parseChunkedBody(_response);
+		finishedParsing = _parser.parseChunkedBody(_response, _server);
 	} else {
 		finishedParsing = _parser.processFixedLengthBody(_server, _response);
 	}
@@ -237,6 +243,7 @@ void Client::resetForNextRequest() {
 	_response = HttpResponse();
 	_writeBuffer.clear();
 	_bytesSent = 0;
+	_lastActivity = std::time(NULL);
 	_clientState = READING_HEADER;
 }
 
@@ -294,6 +301,7 @@ void Client::handleWriteResponse() {
 		return;
 	}
 
+	_lastActivity = std::time(NULL);
 	_bytesSent += bytesWritten;
 
 	if(_bytesSent >= _writeBuffer.size()) {
@@ -375,4 +383,10 @@ void Client::handleWrite() {
 	}
 }
 
+bool Client::clientHasTimedOut() const {
+	if (_clientState == CGI_PIPE_WAIT) {
+		return false;
+	}
+	return (std::time(NULL) - _lastActivity) >= CLIENT_TIMEOUT_SEC;
+}
 

@@ -48,7 +48,7 @@ class CgiExecutor {
 
 		bool	start(const CgiRequest& cgiReq);
 		bool	readOutput();
-		bool	hasTimedOut(time_t timeoutSec = DEFAULT_TIMEOUT_SEC) const;
+		bool	cgiHasTimedOut() const;
 		void	handleTimeout();
 		void	cleanup();
 
