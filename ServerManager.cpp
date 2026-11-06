@@ -21,9 +21,8 @@ ServerManager& ServerManager::operator=(const ServerManager& other) {
 }
 
 ServerManager::~ServerManager() {
-	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
-		it->second.cleanupCgi();
-		close(it->first);
+	while (!_clients.empty()) {
+		removeClient(_clients.begin()->first);
 	}
 	for (std::map<int, size_t>::iterator it = _listenSockets.begin(); it != _listenSockets.end(); ++it) {
 		close(it->first);
@@ -520,14 +519,14 @@ void ServerManager::processPollEvents(std::vector<struct pollfd>& pendingFds) {
 	}
 }
 
-void ServerManager::run() {
+void ServerManager::run(sig_atomic_t g_running) {
 	initServers();
 
 	// initialize a temporary container to hold newly accepted client file descriptors during the current polling cycle
 	std::vector<struct pollfd> pendingFds;
 
 	// begins the infinite event loop that keeps the server running continuously
-	while (true) {
+	while (g_running) {
 		if (!waitForEvents()) {
 			continue;
 		}

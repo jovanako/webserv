@@ -71,7 +71,7 @@ class ServerManager {
 		ServerManager& operator=(const ServerManager& other);
 		~ServerManager();
 		
-		void run();
+		void run(sig_atomic_t g_running);
 };
 
 #endif
