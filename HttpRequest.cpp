@@ -444,11 +444,14 @@ void HttpRequest::resetBody() {
 	_body.reset();
 }
 
-std::string HttpRequest::makeFullPath(const LocationConfig& matchedLocation) const {
+std::string HttpRequest::makeFullPath(const LocationConfig& matchedLocation, const std::string& baseDir) const {
 	std::string path = matchedLocation.getPath();
-	std::string strippedUri = _uri.substr(path.length());
+	std::string strippedUri = _uri;
+	if (_uri.find(path) == 0) {
+		strippedUri = _uri.substr(path.length());
+	}
 
-	std::string fullPath = matchedLocation.getRoot();
+	std::string fullPath = baseDir;
 
 	if (!fullPath.empty() && fullPath[fullPath.length() - 1] == '/') {
 		fullPath.erase(fullPath.length() - 1);

@@ -1,4 +1,5 @@
 #include "RequestHandler.hpp"
+#include <iostream>
 
 RequestHandler::RequestHandler() {}
 
@@ -79,7 +80,7 @@ int RequestHandler::processRequest(const HttpRequest& request, HttpResponse& res
     if(tryCgiHandler(*matchedLocation, uri)) {
         return 0;
     }
-    std::string fullPath = request.makeFullPath(*matchedLocation);
+    std::string fullPath = request.makeFullPath(*matchedLocation, matchedLocation->getRoot());
     return dispatchMethod(*matchedLocation, method, fullPath, uri, request, response);
 }
 
@@ -147,9 +148,8 @@ int RequestHandler::dispatchMethod(const LocationConfig& location, const std::st
 	if (method == "GET") {
 		return handleGet(location, fullPath, uri, response);
 	}
-
 	if (method == "POST") {
-			return handlePost(location, uri, request, response);
+		return handlePost(location, uri, request, response);
 	}
 
 	if (method == "DELETE") {
@@ -174,6 +174,7 @@ int	RequestHandler::handlePost(const LocationConfig& matchedLocation, const std:
 		return 200;
 	}
 
+	// check if a file was passed in the uri
 	std::string path = matchedLocation.getPath();
 	std::string strippedUri = uri.substr(path.length());
 	if (strippedUri == "" || strippedUri[strippedUri.length() - 1] == '/') {
@@ -182,7 +183,7 @@ int	RequestHandler::handlePost(const LocationConfig& matchedLocation, const std:
 		return 200;
 	}
 	
-	std::string savePath = buildUploadPath(matchedLocation, uri);
+	std::string savePath = buildUploadPath(matchedLocation, request);
 
 	// open an output file stream in binary mode to prevent corruption
 	std::ofstream outFile(savePath.c_str(), std::ios::out | std::ios::binary);
@@ -356,21 +357,13 @@ int RequestHandler::serveExistingPath(const LocationConfig& matchedLocation, std
 	return 403;
 }
 
-std::string RequestHandler::buildUploadPath(const LocationConfig& matchedLocation, const std::string& uri) const {
-	size_t lastSlash = uri.find_last_of('/');
-	std::string filename;
-	if (lastSlash != std::string::npos) {
-		filename = uri.substr(lastSlash);
-	} else {
-		filename = "/" + uri;
-	}
-
+std::string RequestHandler::buildUploadPath(const LocationConfig& matchedLocation, const HttpRequest& request) const {
 	// create absolute path to save the file
 	std::string uploadStore = matchedLocation.getUploadStore();
-	if (uploadStore != "") {
-		return uploadStore + filename;
+	if (!uploadStore.empty()) {
+		return request.makeFullPath(matchedLocation, uploadStore);
 	}
-	return matchedLocation.getRoot() + filename;
+	return request.makeFullPath(matchedLocation, matchedLocation.getRoot());
 }
 
 bool RequestHandler::writeUploadBody(std::ofstream& outFile, const std::string& savePath, const HttpRequest& request) const {
@@ -382,7 +375,7 @@ bool RequestHandler::writeUploadBody(std::ofstream& outFile, const std::string& 
 	return true;
 }
 
-void	    RequestHandler::setUploadResponse(const std::string& uri, HttpResponse& response) const {
+void RequestHandler::setUploadResponse(const std::string& uri, HttpResponse& response) const {
     response.setStatusCode(201);
 	response.setHeader("Content-Length", "0");
 	response.setHeader("Location", uri);

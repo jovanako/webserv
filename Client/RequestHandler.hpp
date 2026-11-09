@@ -31,7 +31,7 @@ class RequestHandler {
 		int	      redirectDirectoryRequest(const std::string& uri, HttpResponse& response) const;
         int		    serveExistingPath(const LocationConfig& matchedLocation, std::string& fullPath, struct stat& pathStat, const std::string& uri, HttpResponse& response) const;
 		
-        std::string buildUploadPath(const LocationConfig& matchedLocation, const std::string& uri) const;
+        std::string buildUploadPath(const LocationConfig& matchedLocation, const HttpRequest& request) const;
 		bool	    writeUploadBody(std::ofstream& outFile, const std::string& savePath, const HttpRequest& request) const;
 		void	    setUploadResponse(const std::string& uri, HttpResponse& response) const;
 		

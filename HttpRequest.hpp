@@ -73,7 +73,7 @@ class HttpRequest {
 		bool rewindBody() const;
 		void resetBody();
 
-		std::string	makeFullPath(const LocationConfig& matchedLocation) const;
+		std::string	makeFullPath(const LocationConfig& matchedLocation, const std::string& baseDir) const;
 	};
 
 #endif

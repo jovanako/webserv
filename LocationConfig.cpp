@@ -86,6 +86,9 @@ void LocationConfig::addAllowedMethod(const std::string& method) {
 }
 
 void LocationConfig::addCgiHandler(const std::string& extension, const std::string& path) {
+	if (_cgiHandlers.find(extension) != _cgiHandlers.end()) {
+		throw std::runtime_error("Config Error: Duplicate CGI handler for extension " + extension);
+	}
 	_cgiHandlers[extension] = path;
 }
 

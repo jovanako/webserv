@@ -5,6 +5,7 @@
 #include <vector>
 #include <utility>
 #include <map>
+#include <stdexcept>
 
 class LocationConfig {
 	private:

@@ -255,7 +255,7 @@ void ConfigParser::parseServerDirective(ServerConfig& server,
 		parseLocationBlock(server);
 	}
 	else {
-		throw std::runtime_error("Config Error: Unknown server directive");
+		throw std::runtime_error("Config Error: Unknown server directive '" + directive + "'\n");
 	}
 }
 
@@ -426,7 +426,7 @@ void ConfigParser::parseLocationBlock(ServerConfig &server) {
 			parseLocationReturn(location);
 		}
 		else {
-			throw std::runtime_error("Config Error: Unknown location directive");
+			throw std::runtime_error("Config Error: Unknown location directive '" + directive + "'\n");
 		}
 	}
 	verifyToken("}");
