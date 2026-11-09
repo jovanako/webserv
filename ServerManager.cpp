@@ -519,7 +519,7 @@ void ServerManager::processPollEvents(std::vector<struct pollfd>& pendingFds) {
 	}
 }
 
-void ServerManager::run(sig_atomic_t g_running) {
+void ServerManager::run(volatile sig_atomic_t& g_running) {
 	initServers();
 
 	// initialize a temporary container to hold newly accepted client file descriptors during the current polling cycle

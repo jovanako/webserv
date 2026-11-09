@@ -48,3 +48,11 @@ button {
 button:hover {
     background: #004c99;
 }
+
+input[type="text"] {
+    padding: 0.5rem;
+    border: 1px solid #ccd6dd;
+    border-radius: 4px;
+    font-size: 1rem;
+    margin-right: 0.5rem;
+}

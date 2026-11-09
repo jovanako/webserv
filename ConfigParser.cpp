@@ -1,8 +1,19 @@
 #include "ConfigParser.hpp"
 
-ConfigParser::ConfigParser(): _currentTokenIndex(0) {}
+ConfigParser::ConfigParser()
+	: _configFilePath(normalizePath(resolveDefaultConfigPath(), NULL)),
+	  _configDir(extractDirectory(_configFilePath)),
+	  _currentTokenIndex(0) {}
 
-ConfigParser::ConfigParser(std::string filePath) : _configFilePath(filePath) {}
+ConfigParser::ConfigParser(char **envp)
+	: _configFilePath(normalizePath(resolveDefaultConfigPath(), envp)),
+	  _configDir(extractDirectory(_configFilePath)),
+	  _currentTokenIndex(0) {}
+
+ConfigParser::ConfigParser(std::string filePath, char **envp)
+	: _configFilePath(normalizePath(filePath.empty() ? resolveDefaultConfigPath() : filePath, envp)),
+	  _configDir(extractDirectory(_configFilePath)),
+	  _currentTokenIndex(0) {}
 
 ConfigParser::ConfigParser(const ConfigParser& other) {
 	*this = other;
@@ -11,6 +22,7 @@ ConfigParser::ConfigParser(const ConfigParser& other) {
 ConfigParser& ConfigParser::operator=(const ConfigParser& other) {
 	if (this != &other) {
 		_configFilePath = other._configFilePath;
+		_configDir = other._configDir;
 		_tokens = other._tokens;
 		_currentTokenIndex = other._currentTokenIndex;
 		_servers = other._servers;
@@ -19,6 +31,98 @@ ConfigParser& ConfigParser::operator=(const ConfigParser& other) {
 }
 
 ConfigParser::~ConfigParser() {}
+
+std::string ConfigParser::resolveDefaultConfigPath() {
+	if (access("webserv.conf", F_OK) == 0) {
+		return "webserv.conf";
+	}
+	return "/var/www/webserv.conf";
+}
+
+std::string ConfigParser::extractPwd(char **envp) {
+	if (envp == NULL) {
+		return "";
+	}
+	for (size_t i = 0; envp[i] != NULL; ++i) {
+		std::string entry(envp[i]);
+		if (entry.compare(0, 4, "PWD=") == 0) {
+			return entry.substr(4);
+		}
+	}
+	return "";
+}
+
+std::string ConfigParser::normalizePath(const std::string& path, char **envp) {
+	std::string fullPath = path;
+	if (fullPath.empty() || fullPath[0] != '/') {
+		std::string pwd = extractPwd(envp);
+		if (!pwd.empty() && pwd[0] == '/') {
+			fullPath = pwd + "/" + fullPath;
+		}
+	}
+
+	bool isAbsolute = (!fullPath.empty() && fullPath[0] == '/');
+	std::istringstream stream(fullPath);
+	std::string segment;
+	std::vector<std::string> segments;
+
+	while (std::getline(stream, segment, '/')) {
+		if (segment.empty() || segment == ".") {
+			continue;
+		}
+		if (segment == "..") {
+			if (!segments.empty() && segments.back() != "..") {
+				segments.pop_back();
+			} else if (!isAbsolute) {
+				segments.push_back(segment);
+			}
+		} else {
+			segments.push_back(segment);
+		}
+	}
+
+	if (segments.empty()) {
+		return isAbsolute ? "/" : ".";
+	}
+
+	std::string normalized = isAbsolute ? "/" : "";
+	for (size_t i = 0; i < segments.size(); ++i) {
+		if (i > 0) {
+			normalized += "/";
+		}
+		normalized += segments[i];
+	}
+	return normalized;
+}
+
+std::string ConfigParser::extractDirectory(const std::string& filePath) {
+	size_t lastSlash = filePath.find_last_of('/');
+	if (lastSlash == std::string::npos) {
+		return ".";
+	}
+	if (lastSlash == 0) {
+		return "/";
+	}
+	return filePath.substr(0, lastSlash);
+}
+
+std::string ConfigParser::resolveConfigPath(const std::string& path) const {
+	if (path.empty()) {
+		return path;
+	}
+	if (path[0] == '/') {
+		return normalizePath(path, NULL);
+	}
+	return normalizePath(_configDir + "/" + path, NULL);
+}
+
+const std::string& ConfigParser::getConfigFilePath() const {
+	return _configFilePath;
+}
+
+const std::string& ConfigParser::getConfigDir() const {
+	return _configDir;
+}
 
 void ConfigParser::removeComment(std::string& line) const {
 	size_t commentPos = line.find('#');
@@ -186,7 +290,7 @@ std::string ConfigParser::getErrorPagePath(
 	}
 
 	// the last argument immediately before the semicolon is always the path
-	return args[args.size() - 1];
+	return resolveConfigPath(args[args.size() - 1]);
 }
 
 void ConfigParser::addErrorPageCodes(ServerConfig& server,
@@ -239,7 +343,7 @@ void ConfigParser::parseLocationMethods(LocationConfig& location) {
 }
 
 void ConfigParser::parseLocationRoot(LocationConfig& location) {
-	location.setRoot(getNextToken());
+	location.setRoot(resolveConfigPath(getNextToken()));
 	verifyToken(";");
 }
 
@@ -256,7 +360,7 @@ void ConfigParser::parseLocationAutoindex(LocationConfig& location) {
 }
 
 void ConfigParser::parseLocationUploadStore(LocationConfig& location) {
-	location.setUploadStore(getNextToken());
+	location.setUploadStore(resolveConfigPath(getNextToken()));
 	verifyToken(";");
 }
 
@@ -269,7 +373,7 @@ void ConfigParser::parseLocationCgi(LocationConfig& location) {
 	if (path == ";") {
 		throw std::runtime_error("Config Error: 'cgi_pass' requires an executable path argument");
 	}
-	location.addCgiHandler(extension, path);
+	location.addCgiHandler(extension, resolveConfigPath(path));
 	verifyToken(";");
 }
 

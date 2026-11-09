@@ -6,14 +6,21 @@
 #include <sstream>
 #include <iostream>
 #include <cstdlib>
+#include <unistd.h>
 
 class ConfigParser {
 	private:
 		std::string                 _configFilePath;
+		std::string                 _configDir;
    		std::vector<std::string>    _tokens;
     	size_t                      _currentTokenIndex;
     	std::vector<ServerConfig>   _servers;
 
+		static std::string	resolveDefaultConfigPath();
+		static std::string	extractPwd(char **envp);
+		static std::string	normalizePath(const std::string& path, char **envp);
+		static std::string	extractDirectory(const std::string& filePath);
+		std::string			resolveConfigPath(const std::string& path) const;
 		void		tokenize();
 		void		removeComment(std::string& line) const;
 		void		isolatePunctuation(std::string& line) const;
@@ -52,12 +59,15 @@ class ConfigParser {
 		
 	public:
 		ConfigParser();
-		ConfigParser(std::string filePath);
+		ConfigParser(char **envp);
+		ConfigParser(std::string filePath, char **envp = NULL);
 		ConfigParser(const ConfigParser& other);
 		ConfigParser& operator=(const ConfigParser& other);
 		~ConfigParser();
 
 		std::vector<ServerConfig>	parse();
+		const std::string&			getConfigFilePath() const;
+		const std::string&			getConfigDir() const;
 };
 
 #endif

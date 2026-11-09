@@ -24,7 +24,7 @@ body = f"""<!DOCTYPE html>
 <body>
     <div class="container">
         <h1>Greetings, {name}</h1>
-        <p><a href="/index.html">&larr; Back to Home</a></p>
+        <p><a href="/cgi.html">&larr; Back to CGI Demo</a> | <a href="/index.html">Home</a></p>
     </div>
 </body>
 </html>

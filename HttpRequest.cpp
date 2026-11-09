@@ -92,7 +92,7 @@ int HttpRequest::validateUriStructure(const std::string& uri) const {
 	if (uri.find("/../") != std::string::npos
 		|| (uri.length() >= 3 && uri.substr(uri.length() - 3) == "/..")
 		|| uri.find("/..?") != std::string::npos) {
-		return 403;
+		return 400; // check error code
 	}
 	return 0;
 }

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CGI Demo - Webserv</title>
+    <link rel="stylesheet" href="/style.css">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+</head>
+<body>
+    <div class="container">
+        <h1>CGI Scripts Demo</h1>
+        <p>Test executing Python CGI scripts using <code>GET</code> and <code>POST</code> requests.</p>
+
+        <section class="card">
+            <h2>GET Request (<code>/cgi-bin/hello.py</code>)</h2>
+            <p>Sends parameters via the URL query string (<code>QUERY_STRING</code>).</p>
+            <form action="/cgi-bin/hello.py" method="GET">
+                <input type="text" name="name" placeholder="Enter your name" required>
+                <button type="submit">Send GET</button>
+            </form>
+        </section>
+
+        <section class="card">
+            <h2>POST Request (<code>/cgi-bin/greetings.py</code>)</h2>
+            <p>Sends form data in the HTTP request body (<code>stdin</code>).</p>
+            <form action="/cgi-bin/greetings.py" method="POST">
+                <input type="text" name="name" placeholder="Enter your name" required>
+                <button type="submit">Send POST</button>
+            </form>
+        </section>
+
+        <p><a href="/index.html">&larr; Back to Home</a></p>
+    </div>
+</body>
+</html>
