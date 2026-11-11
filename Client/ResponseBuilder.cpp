@@ -17,16 +17,30 @@ ResponseBuilder& ResponseBuilder::operator=(const ResponseBuilder& other) {
     return *this;
 }
 
-bool ResponseBuilder::loadCustomErrorPage(const ServerConfig& server, int statusCode, std::string& body,
-	std::string& mimeType) const {
-	const std::map<int, std::string>& errorPages = server.getErrorPages();
-	std::map<int, std::string>::const_iterator it = errorPages.find(statusCode);
-	if (it == errorPages.end()) {
-		return false;
+bool ResponseBuilder::loadCustomErrorPage(const ServerConfig& server, const HttpRequest& request, int statusCode,
+	std::string& body, std::string& mimeType) const {
+	std::string filePath;
+	if (!request.getUri().empty()) {
+		RequestHandler handler;
+		const LocationConfig* matchedLocation = handler.findMatchingLocation(server, request.getUri());
+		if (matchedLocation) {
+			const std::map<int, std::string>& locErrors = matchedLocation->getErrorPages();
+			std::map<int, std::string>::const_iterator locIt = locErrors.find(statusCode);
+			if (locIt != locErrors.end()) {
+				filePath = locIt->second;
+			}
+		}
 	}
 
-	std::string filePath = it->second;
-	// prepend root or server path if needed
+	if (filePath.empty()) {
+		const std::map<int, std::string>& errorPages = server.getErrorPages();
+		std::map<int, std::string>::const_iterator it = errorPages.find(statusCode);
+		if (it == errorPages.end()) {
+			return false;
+		}
+		filePath = it->second;
+	}
+
 	std::ifstream file(filePath.c_str(), std::ios::in | std::ios::binary);
 	if (!file.is_open()) {
 		return false;
@@ -54,7 +68,7 @@ void ResponseBuilder::buildErrorResponse(int statusCode, HttpResponse& response,
 
 	std::string body;
 	std::string mimeType = "text/html";
-	if (!loadCustomErrorPage(server, statusCode, body, mimeType)) {
+	if (!loadCustomErrorPage(server, request, statusCode, body, mimeType)) {
 		body = createDefaultErrorPage(statusCode, response);
     }
 

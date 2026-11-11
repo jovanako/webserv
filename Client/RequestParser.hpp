@@ -42,8 +42,8 @@ public:
     bool hasHeaderEnd(size_t& headerEnd) const;
 
     bool parseHeaders(HttpResponse& response);
-    bool parseChunkedBody(HttpResponse& response, ServerConfig& server);
-    bool processFixedLengthBody(const ServerConfig& server, HttpResponse& response);
+    bool parseChunkedBody(HttpResponse& response, size_t maxBodySize);
+    bool processFixedLengthBody(size_t maxBodySize, HttpResponse& response);
 };
 
 #endif

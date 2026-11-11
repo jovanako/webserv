@@ -145,6 +145,14 @@ bool Client::selectVirtualHost() {
 	return true;
 }
 
+size_t Client::getEffectiveMaxBodySize() const {
+	const LocationConfig* matchedLocation = _handler.findMatchingLocation(_server, _parser.getRequest().getUri());
+	if (matchedLocation) {
+		return matchedLocation->getClientMaxBodySize();
+	}
+	return _server.getClientMaxBodySize();
+}
+
 void Client::prepareRequestBody(size_t headerEnd) {
 	// Only keep leftover bytes that belong to the body by deleting the header
 	_parser.eraseBuffer(0, headerEnd + 4);
@@ -181,7 +189,7 @@ void Client::handleReadHeader() {
 			return;
 		}
 	
-		if (_parser.getRequest().getContentLength() > _server.getClientMaxBodySize()) {
+		if (_parser.getRequest().getContentLength() > getEffectiveMaxBodySize()) {
 			_response.setStatusCode(413); // 413 Payload too large error
 			setupErrorResponse(_response.getStatusCode());
 			return;
@@ -212,10 +220,11 @@ bool Client::readChunk() {
 
 void Client::handleReadBody() {
 	bool finishedParsing = false;
+	size_t maxBodySize = getEffectiveMaxBodySize();
 	if (_parser.getRequest().isChunked()) {
-		finishedParsing = _parser.parseChunkedBody(_response, _server);
+		finishedParsing = _parser.parseChunkedBody(_response, maxBodySize);
 	} else {
-		finishedParsing = _parser.processFixedLengthBody(_server, _response);
+		finishedParsing = _parser.processFixedLengthBody(maxBodySize, _response);
 	}
 
 	if(finishedParsing) {

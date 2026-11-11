@@ -28,7 +28,7 @@ class RequestHandler {
         bool		findIndexFile(const LocationConfig& matchedLocation, std::string& fullPath, struct stat& pathStat) const;
 		int		    serveAutoindex(const LocationConfig& matchedLocation, const std::string& fullPath, const std::string& uri, HttpResponse& response) const;
 		int		    serveFile(const std::string& fullPath, HttpResponse& response) const;
-		int	      redirectDirectoryRequest(const std::string& uri, HttpResponse& response) const;
+		int	      	redirectDirectoryRequest(const std::string& uri, HttpResponse& response) const;
         int		    serveExistingPath(const LocationConfig& matchedLocation, std::string& fullPath, struct stat& pathStat, const std::string& uri, HttpResponse& response) const;
 		
         std::string buildUploadPath(const LocationConfig& matchedLocation, const HttpRequest& request) const;

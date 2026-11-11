@@ -51,11 +51,10 @@ void HttpRequest::setMethod(const std::string& method) {
             return;
         }
     }
-
 	if (method == "GET" || method == "POST" || method == "DELETE") {
 		_method = method;
 	} else {
-		_errorCode = 405; // 405 Not Allowed
+		_errorCode = 405; // Not Allowed !! check if 501
 		_parseState = PARSE_ERROR;
 	}
 }

@@ -12,8 +12,8 @@
 
 class ResponseBuilder {
     private:
-	    bool		loadCustomErrorPage(const ServerConfig& server, int statusCode, std::string& body,
-			std::string& mimeType) const;
+	    bool		loadCustomErrorPage(const ServerConfig& server, const HttpRequest& request, int statusCode,
+			std::string& body, std::string& mimeType) const;
 		std::string	createDefaultErrorPage(int statusCode, const HttpResponse& response) const;   
         bool		shouldKeepAlive(const HttpRequest& request, const HttpResponse& response) const;
 

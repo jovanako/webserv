@@ -109,7 +109,7 @@ const LocationConfig* RequestHandler::findMatchingLocation(const ServerConfig& s
 	return matchedLocation;
 }
 
-bool		RequestHandler::isMethodAllowed(const LocationConfig& location, const std::string& method) const {
+bool RequestHandler::isMethodAllowed(const LocationConfig& location, const std::string& method) const {
 	const std::vector<std::string> allowedMethods = location.getAllowedMethods();
 	for (std::vector<std::string>::const_iterator it = allowedMethods.begin();
 		it != allowedMethods.end(); ++it) {
@@ -319,7 +319,7 @@ static std::string generateAutoindex(const std::string& fullPath, const std::str
 
 int RequestHandler::serveAutoindex(const LocationConfig& matchedLocation, const std::string& fullPath, const std::string& uri, HttpResponse& response) const {
     if (!matchedLocation.getAutoindex()) {
-		return 403;
+		return 404;
 	}
 
 	std::string htmlBody = generateAutoindex(fullPath, uri);

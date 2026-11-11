@@ -209,7 +209,7 @@ bool RequestParser::appendChunkData(size_t chunkLineEnd, size_t chunkSize, HttpR
     return true;
 }
 
-bool RequestParser::parseChunkedBody(HttpResponse& response, ServerConfig& server) {
+bool RequestParser::parseChunkedBody(HttpResponse& response, size_t maxBodySize) {
 	while (true) {
         size_t pos;
         size_t chunkSize;
@@ -217,7 +217,7 @@ bool RequestParser::parseChunkedBody(HttpResponse& response, ServerConfig& serve
             return false;
         }
 
-		if (chunkSize > (server.getClientMaxBodySize() - _request.getBody().getSize())) {
+		if (chunkSize > (maxBodySize - _request.getBody().getSize())) {
 			response.setStatusCode(413);
 			return false;
 		}
@@ -232,10 +232,10 @@ bool RequestParser::parseChunkedBody(HttpResponse& response, ServerConfig& serve
     }
 }
 
-bool RequestParser::processFixedLengthBody(const ServerConfig& server, HttpResponse& response) {
+bool RequestParser::processFixedLengthBody(size_t maxBodySize, HttpResponse& response) {
     size_t contentLen = _request.getContentLength();
 
-    if (_readBuffer.length() > server.getClientMaxBodySize()) {
+    if (_readBuffer.length() > maxBodySize) {
         response.setStatusCode(413);
         return false;
     }

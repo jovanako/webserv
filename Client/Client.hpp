@@ -52,6 +52,7 @@ class Client {
 		std::string	extractHostName(const std::string& hostValue) const;
 		void		applyVirtualHostSelection(const std::string& hostName);
 		bool		selectVirtualHost();
+		size_t		getEffectiveMaxBodySize() const;
 		void		prepareRequestBody(size_t headerEnd);
 		void		handleReadBody();
 
