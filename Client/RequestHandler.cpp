@@ -135,7 +135,7 @@ int RequestHandler::handleRedirect(const LocationConfig& location, HttpResponse&
 	return 500;
 }
 
-bool		RequestHandler::tryCgiHandler(const LocationConfig& location, const std::string& uri) const {
+bool RequestHandler::tryCgiHandler(const LocationConfig& location, const std::string& uri) const {
 	std::string scriptName = location.resolveScriptName(uri);
 	if (scriptName.empty()) {
 		return false;
@@ -147,15 +147,10 @@ bool		RequestHandler::tryCgiHandler(const LocationConfig& location, const std::s
 int RequestHandler::dispatchMethod(const LocationConfig& location, const std::string& method, const std::string& fullPath, const std::string& uri, const HttpRequest& request, HttpResponse& response) const {
 	if (method == "GET") {
 		return handleGet(location, fullPath, uri, response);
-	}
-	if (method == "POST") {
+	} else if (method == "POST") {
 		return handlePost(location, uri, request, response);
 	}
-
-	if (method == "DELETE") {
-		return handleDelete(fullPath, response);
-	}
-	return 405;
+	return handleDelete(fullPath, response);
 }
 
 int RequestHandler::handleGet(const LocationConfig& matchedLocation, std::string fullPath, const std::string uri, HttpResponse& response) const {
@@ -165,6 +160,37 @@ int RequestHandler::handleGet(const LocationConfig& matchedLocation, std::string
 		return serveExistingPath(matchedLocation, fullPath, pathStat, uri, response);
 	}
 	return 404;
+}
+
+static int validateUploadTarget(const std::string& savePath) {
+	size_t lastSlash = savePath.find_last_of('/');
+	std::string parentDir;
+	if (lastSlash == std::string::npos) {
+		parentDir = ".";
+	} else if (lastSlash == 0) {
+		parentDir = "/";
+	} else {
+		parentDir = savePath.substr(0, lastSlash);
+	}
+
+	struct stat parentStat;
+	// does the parent folder exist, and is it actually a folder?
+	if (stat(parentDir.c_str(), &parentStat) != 0 || !S_ISDIR(parentStat.st_mode)) {
+		return 404; // Not Found
+	}
+	// does the server have permission to create files inside the parent folder?
+	if (access(parentDir.c_str(), W_OK | X_OK) != 0) {
+		return 403; // Forbidden
+	}
+
+	// if the target file already exists, can we overwrite it?
+	struct stat targetStat;
+	if (stat(savePath.c_str(), &targetStat) == 0) {
+		if (S_ISDIR(targetStat.st_mode) || access(savePath.c_str(), W_OK) != 0) {
+			return 403; // Forbidden
+		} 
+	}
+	return 0;
 }
 
 int	RequestHandler::handlePost(const LocationConfig& matchedLocation, const std::string uri, const HttpRequest& request, HttpResponse& response) const {
@@ -184,12 +210,16 @@ int	RequestHandler::handlePost(const LocationConfig& matchedLocation, const std:
 	}
 	
 	std::string savePath = buildUploadPath(matchedLocation, request);
+	int targetError = validateUploadTarget(savePath);
+	if (targetError != 0) {
+		return targetError;
+	}
 
 	// open an output file stream in binary mode to prevent corruption
 	std::ofstream outFile(savePath.c_str(), std::ios::out | std::ios::binary);
 
 	if (!outFile.is_open()) {
-		return 500; // check error code
+		return 500;
 	}
 
 	if (!writeUploadBody(outFile, savePath, request)) {
@@ -205,9 +235,9 @@ int	RequestHandler::handleDelete(const std::string& fullPath, HttpResponse& resp
 	struct stat pathStat;
 	// check if file exists
 	if (stat(fullPath.c_str(), &pathStat) < 0) {
-		return 404; // Not found
+		return 404;
 	}
-		// std::remove returns 0 on success, and non-zero on failure
+	// std::remove returns 0 on success, and non-zero on failure
 	if (std::remove(fullPath.c_str()) == 0) {
 		response.setStatusCode(204);
 		response.setHeader("Content-Length", "0");
@@ -218,8 +248,12 @@ int	RequestHandler::handleDelete(const std::string& fullPath, HttpResponse& resp
 
 bool RequestHandler::findIndexFile(const LocationConfig& matchedLocation, std::string& fullPath, struct stat& pathStat) const {
 	const std::vector<std::string>& indices = matchedLocation.getIndex();
+	std::string baseDir = fullPath;
+	if (!baseDir.empty() && baseDir[baseDir.length() - 1] != '/') {
+		baseDir += "/";
+	}
 	for (size_t i = 0; i < indices.size(); ++i) {
-		std::string indexPath = fullPath + indices[i];
+		std::string indexPath = baseDir + indices[i];
 		struct stat indexStat;
 
 		if (stat(indexPath.c_str(), &indexStat) == 0 && S_ISREG(indexStat.st_mode)) {
