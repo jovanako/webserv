@@ -4,7 +4,10 @@ LocationConfig::LocationConfig()
     : _path(""),
       _root(""),
       _autoindex(false),
+      _hasAutoindex(false),
       _uploadStore(""),
+      _clientMaxBodySize(1048576),
+      _hasClientMaxBodySize(false),
       _redirect(std::make_pair(0, std::string(""))) {}
 
 LocationConfig::LocationConfig(const LocationConfig& other) {
@@ -17,10 +20,14 @@ LocationConfig& LocationConfig::operator=(const LocationConfig& other) {
         _allowedMethods = other._allowedMethods;
         _root = other._root;
         _autoindex = other._autoindex;
+        _hasAutoindex = other._hasAutoindex;
         _index = other._index;
         _cgiHandlers = other._cgiHandlers;
         _uploadStore = other._uploadStore;
+        _clientMaxBodySize = other._clientMaxBodySize;
+        _hasClientMaxBodySize = other._hasClientMaxBodySize;
         _redirect = other._redirect;
+        _errorPages = other._errorPages;
     }
     return *this;
 }
@@ -46,6 +53,10 @@ bool LocationConfig::getAutoindex() const {
 	return _autoindex;
 }
 
+bool LocationConfig::hasAutoindex() const {
+	return _hasAutoindex;
+}
+
 const std::map<std::string, std::string>& LocationConfig::getCgiHandlers() const {
 	return _cgiHandlers;
 }
@@ -53,8 +64,21 @@ const std::map<std::string, std::string>& LocationConfig::getCgiHandlers() const
 const std::string& LocationConfig::getUploadStore() const {
 	return _uploadStore;
 }
+
+size_t LocationConfig::getClientMaxBodySize() const {
+	return _clientMaxBodySize;
+}
+
+bool LocationConfig::hasClientMaxBodySize() const {
+	return _hasClientMaxBodySize;
+}
+
 const std::pair<int, std::string>& LocationConfig::getRedirect() const {
 	return _redirect;
+}
+
+const std::map<int, std::string>& LocationConfig::getErrorPages() const {
+	return _errorPages;
 }
 
 void LocationConfig::setPath(const std::string& path) {
@@ -65,12 +89,34 @@ void LocationConfig::setRoot(const std::string& root) {
 	_root = root;
 }
 
+void LocationConfig::setIndex(const std::vector<std::string>& indexVector) {
+    _index = indexVector;
+}
+
+void LocationConfig::setAllowedMethods(const std::vector<std::string>& methodsVector) {
+	_allowedMethods = methodsVector;
+}
+
+void LocationConfig::setCgiHandlers(const std::map<std::string, std::string>& cgiHandlers) {
+	_cgiHandlers = cgiHandlers;
+}
+
+void LocationConfig::setErrorPages(const std::map<int, std::string>& errorPages) {
+	_errorPages = errorPages;
+}
+
 void LocationConfig::setAutoindex(bool autoindex) {
 	_autoindex = autoindex;
+	_hasAutoindex = true;
 }
 
 void LocationConfig::setUploadStore(const std::string& uploadStore) {
 	_uploadStore = uploadStore;
+}
+
+void LocationConfig::setClientMaxBodySize(size_t size) {
+	_clientMaxBodySize = size;
+	_hasClientMaxBodySize = true;
 }
 
 void LocationConfig::setRedirect(int statusCode, const std::string& url) {
@@ -90,6 +136,10 @@ void LocationConfig::addCgiHandler(const std::string& extension, const std::stri
 		throw std::runtime_error("Config Error: Duplicate CGI handler for extension " + extension);
 	}
 	_cgiHandlers[extension] = path;
+}
+
+void LocationConfig::addErrorPage(int statusCode, const std::string& errorFilePath) {
+	_errorPages[statusCode] = errorFilePath;
 }
 
 std::string LocationConfig::resolveScriptName(const std::string& uri) const {

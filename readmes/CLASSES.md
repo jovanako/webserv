@@ -113,7 +113,7 @@ Resides in the static configuration model, establishing the boundaries, limits, 
 
 - **ConfigParser:** Populates `ServerConfig` instance line-by-line while parsing blocks from the `.conf` file.
 
-- **ServerManager:** Receives a list of `ServerConfig` instances during initialization. It reads `getHost()` and `getPortString()` to bind and listen on designated network interfaces, and maps listening file descriptors back to their corresponding `ServerConfig` pointers.
+- **ServerManager:** Receives a list of `ServerConfig` instances during initialization. It reads `getHost()` and `createPortString()` to bind and listen on designated network interfaces, and maps listening file descriptors back to their corresponding `ServerConfig` pointers.
 
 - **Client:** Passed to newly accepted `Client` objects via `Client::setServer()`. The client references `getClientMaxBodySize()`, `getErrorPages()`, and `getLocations()` to enforce upload constraints, error pages, and routing rules.
 

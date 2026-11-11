@@ -156,7 +156,7 @@ void CgiRequest::initStandardEnvVars(const ServerConfig& server, const LocationC
 	addEnvVar("SCRIPT_NAME", scriptName);
 	addEnvVar("SCRIPT_FILENAME", _scriptFileName);
 	addEnvVar("SERVER_NAME", resolveServerName(server, request));
-	addEnvVar("SERVER_PORT", server.getPortString());
+	addEnvVar("SERVER_PORT", server.createPortString());
 	addEnvVar("SERVER_PROTOCOL", request.getVersion());
 	addEnvVar("SERVER_SOFTWARE", "webserv/1.0");
 }

@@ -333,7 +333,7 @@ int ServerManager::createListeningSocket(const ServerConfig& server,
 	hints.ai_flags = AI_PASSIVE;
 
 	std::string host = server.getHost();
-	std::string portStr = server.getPortString();
+	std::string portStr = server.createPortString();
 	if (getaddrinfo(host.c_str(), portStr.c_str(), &hints, &serverInfo) != 0) {
 		std::cerr << "Error: getaddrinfo failed\n";
 		return -1;
@@ -430,7 +430,7 @@ void ServerManager::initServers() {
 		}
 
 		struct addrinfo* serverInfo;
-		std::string portStr = _servers[i].getPortString();
+		std::string portStr = _servers[i].createPortString();
 		int listenFd = createListeningSocket(_servers[i], serverInfo);
 		if (listenFd < 0) {
 			throw std::runtime_error("Failed to create listening socket");

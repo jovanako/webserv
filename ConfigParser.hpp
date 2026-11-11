@@ -16,46 +16,39 @@ class ConfigParser {
     	size_t                      _currentTokenIndex;
     	std::vector<ServerConfig>   _servers;
 
-		static std::string	resolveDefaultConfigPath();
-		static std::string	extractPwd(char **envp);
-		static std::string	normalizePath(const std::string& path, char **envp);
-		static std::string	extractDirectory(const std::string& filePath);
-		std::string			resolveConfigPath(const std::string& path) const;
 		void		tokenize();
-		void		removeComment(std::string& line) const;
-		void		isolatePunctuation(std::string& line) const;
-		void		appendLineTokens(const std::string& line);
 		std::string	getNextToken();
+		std::string resolveDefaultConfigPath() const;
+		std::string resolveConfigPath(const std::string& path) const;
+		std::string normalizePath(const std::string& path, char **envp) const;
+		std::string extractDirectory(const std::string& filePath) const;
+		void		appendLineTokens(const std::string& line);
+		std::vector<std::string>	getTokensUntilSemicolon();
+		std::string					getErrorPagePath(const std::vector<std::string>& args) const;
+		void		verifyToken(const std::string& expected);
+		size_t		parseSize(const std::string& sizeStr);
+
 		void		parseServerBlock();
-		void		parseListenTarget(const std::string& token,
-			std::string& host, std::string& portStr) const;
-		int		parseListenPort(const std::string& portStr) const;
+		void		parseServerDirective(ServerConfig& server, const std::string& directive);
+		void		addDefaultLocation(ServerConfig& server) const;
+		void		parseLocationBlock(ServerConfig& server);
+		void		parseLocationDirective(LocationConfig& location, const std::string& directive);
+		void		addServerDefaultsToLocation(const ServerConfig& server, LocationConfig& location) const;
+		
 		void		parseListenDirective(ServerConfig& server);
 		void		parseServerNames(ServerConfig& server);
-		void		parseClientMaxBodySize(ServerConfig& server);
-		void		parseServerDirective(ServerConfig& server,
-			const std::string& directive);
-		void		parseErrorPage(ServerConfig& server);
-		std::vector<std::string> getTokensUntilSemicolon();
-		std::string getErrorPagePath(const std::vector<std::string>& args) const;
-		void		addErrorPageCodes(ServerConfig& server,
-			const std::vector<std::string>& args, const std::string& errorPath);
-		void		parseLocationBlock(ServerConfig& server);
-		void		parseLocationIndex(LocationConfig& location, bool& indexPresent);
-		void		parseLocationMethods(LocationConfig& location);
-		void		parseLocationRoot(LocationConfig& location);
-		void		parseLocationAutoindex(LocationConfig& location);
-		void		parseLocationUploadStore(LocationConfig& location);
-		void		parseLocationCgi(LocationConfig& location);
-		void		parseLocationReturn(LocationConfig& location);
-		void		verifyToken(const std::string& expected);
-		size_t		parseSizeUnit(const std::string& sizeStr,
-			std::string& numPart) const;
-		size_t		parseSizeNumber(const std::string& numPart,
-			const std::string& originalSize) const;
-		size_t		multiplySizeValue(size_t value, size_t multiplier,
-			const std::string& originalSize) const;
-		size_t		parseSize(const std::string& sizeStr);
+
+		template <typename T> void parseIndex(T& config);
+		template <typename T> void parseRoot(T& config);
+		template <typename T> void parseAutoindex(T& config);
+		template <typename T> void parseUploadStore(T& config);
+		template <typename T> void parseMaxBodySize(T& config);
+		template <typename T> void parseCgi(T& config);
+		template <typename T> void parseReturn(T& config);
+		template <typename T> void parseErrorPage(T& config);
+		template <typename T> void parseAllowedMethods(T& config);
+
+		template <typename T> void addErrorPageCodes(T& config, const std::vector<std::string>& args, const std::string& errorPath);
 		
 	public:
 		ConfigParser();
@@ -65,9 +58,9 @@ class ConfigParser {
 		ConfigParser& operator=(const ConfigParser& other);
 		~ConfigParser();
 
-		std::vector<ServerConfig>	parse();
 		const std::string&			getConfigFilePath() const;
 		const std::string&			getConfigDir() const;
+		std::vector<ServerConfig>	parse();
 };
 
 #endif

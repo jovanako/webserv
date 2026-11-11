@@ -183,7 +183,7 @@ Reads a location path, verifies the opening and closing braces, dispatches locat
 
 Reads and stores the location root path, then verifies `;`.
 
-### `parseLocationIndex(LocationConfig&, indexPresent)`
+### `parseLocationIndex(LocationConfig&)`
 
 Requires at least one index file, collects all index names until `;`, stores them, and marks that an explicit index was provided.
 
