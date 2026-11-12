@@ -95,8 +95,10 @@ bool CgiExecutor::validateScript(const CgiRequest& cgiReq) {
 		return false;
 	}
 
+	struct stat execStat;
 	const std::string& executable = cgiReq.getExecutable();
-	if (access(executable.c_str(), X_OK) != 0) {
+	if (stat(executable.c_str(), &execStat) != 0 ||
+		!S_ISREG(execStat.st_mode) || access(executable.c_str(), X_OK) != 0) {
 		_errorCode = 500;
 		_state = CGI_ERROR;
 		return false;

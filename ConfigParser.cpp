@@ -17,7 +17,7 @@ ConfigParser::ConfigParser(std::string filePath, char **envp)
 		if (filePath.empty()) {
 			throw std::runtime_error("Config Error: Configuration file path cannot be empty");
 		}
-	  }
+}
 
 ConfigParser::ConfigParser(const ConfigParser& other) {
 	*this = other;
@@ -171,6 +171,10 @@ static size_t parseSizeNumber(const std::string& numPart, const std::string& ori
 }
 
 void ConfigParser::tokenize() {
+	struct stat st;
+	if (stat(_configFilePath.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) {
+		throw std::runtime_error("File not found or invalid file: " + _configFilePath); // check message
+	}
 	std::ifstream configFile(_configFilePath.c_str());
 	if (!configFile.is_open()) {
 		throw std::runtime_error("Could not open config file: " + _configFilePath);

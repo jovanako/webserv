@@ -41,6 +41,11 @@ bool ResponseBuilder::loadCustomErrorPage(const ServerConfig& server, const Http
 		filePath = it->second;
 	}
 
+	struct stat st;
+	if (stat(filePath.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) {
+		return false;
+	}
+
 	std::ifstream file(filePath.c_str(), std::ios::in | std::ios::binary);
 	if (!file.is_open()) {
 		return false;
