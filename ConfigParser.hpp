@@ -18,7 +18,6 @@ class ConfigParser {
 
 		void		tokenize();
 		std::string	getNextToken();
-		std::string resolveDefaultConfigPath() const;
 		std::string resolveConfigPath(const std::string& path) const;
 		std::string normalizePath(const std::string& path, char **envp) const;
 		std::string extractDirectory(const std::string& filePath) const;

@@ -1,19 +1,23 @@
 #include "ConfigParser.hpp"
 
 ConfigParser::ConfigParser()
-	: _configFilePath(normalizePath(resolveDefaultConfigPath(), NULL)),
+	: _configFilePath(normalizePath("webserv.conf", NULL)),
 	  _configDir(extractDirectory(_configFilePath)),
 	  _currentTokenIndex(0) {}
 
 ConfigParser::ConfigParser(char **envp)
-	: _configFilePath(normalizePath(resolveDefaultConfigPath(), envp)),
+	: _configFilePath(normalizePath("webserv.conf", envp)),
 	  _configDir(extractDirectory(_configFilePath)),
 	  _currentTokenIndex(0) {}
 
 ConfigParser::ConfigParser(std::string filePath, char **envp)
-	: _configFilePath(normalizePath(filePath.empty() ? resolveDefaultConfigPath() : filePath, envp)),
+	: _configFilePath(normalizePath(filePath, envp)),
 	  _configDir(extractDirectory(_configFilePath)),
-	  _currentTokenIndex(0) {}
+	  _currentTokenIndex(0) {
+		if (filePath.empty()) {
+			throw std::runtime_error("Config Error: Configuration file path cannot be empty");
+		}
+	  }
 
 ConfigParser::ConfigParser(const ConfigParser& other) {
 	*this = other;
@@ -190,13 +194,6 @@ std::string ConfigParser::getNextToken() {
 	return _tokens[_currentTokenIndex++];
 }
 
-std::string ConfigParser::resolveDefaultConfigPath() const {
-	if (access("webserv.conf", F_OK) == 0) {
-		return "webserv.conf";
-	}
-	return "/var/www/webserv.conf";
-}
-
 std::string ConfigParser::resolveConfigPath(const std::string& path) const {
 	if (path.empty()) {
 		return path;
@@ -237,10 +234,18 @@ std::string ConfigParser::normalizePath(const std::string& path, char **envp) co
 	}
 
 	if (segments.empty()) {
-		return isAbsolute ? "/" : ".";
+		if (isAbsolute) {
+			return "/";
+		}
+		return ".";
 	}
 
-	std::string normalized = isAbsolute ? "/" : "";
+	std::string normalized;
+	if (isAbsolute) {
+		normalized = "/";
+	} else {
+		normalized = "";
+	}
 	for (size_t i = 0; i < segments.size(); ++i) {
 		if (i > 0) {
 			normalized += "/";

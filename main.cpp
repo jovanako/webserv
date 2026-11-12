@@ -24,7 +24,12 @@ int main(int argc, char **argv, char **envp) {
 	}
 	setupSignals();
 	try {
-		ConfigParser parser = (argc == 2) ? ConfigParser(argv[1], envp) : ConfigParser(envp);
+		std::string configPath = "webserv.conf";
+		if (argc == 2) {
+			configPath = argv[1];
+		}
+		ConfigParser parser(configPath, envp);
+		
 		std::cout << "Parsing config file at " << parser.getConfigFilePath() << std::endl;
 		const std::vector<ServerConfig>& servers = parser.parse();
 		std::cout << "Starting server listeners" << std::endl;
