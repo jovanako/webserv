@@ -155,7 +155,7 @@ int RequestHandler::dispatchMethod(const LocationConfig& location, const std::st
 
 int RequestHandler::handleGet(const LocationConfig& matchedLocation, std::string fullPath, const std::string uri, HttpResponse& response) const {
     struct stat pathStat;
-	// check if file exists
+	// check if path exists
 	if (stat(fullPath.c_str(), &pathStat) == 0) {
 		return serveExistingPath(matchedLocation, fullPath, pathStat, uri, response);
 	}
@@ -274,8 +274,7 @@ static std::string autoindexBaseUri(const std::string& requestUri) {
 	return baseUri;
 }
 
-static void appendAutoindexHeader(std::ostringstream& html,
-	const std::string& requestUri) {
+static void appendAutoindexHeader(std::ostringstream& html, const std::string& requestUri) {
 	html << "<!DOCTYPE html>\n"
 		 << "<html>\n<head>\n"
 		 << "<title>Index of " << requestUri << "</title>\n"
@@ -363,7 +362,7 @@ int RequestHandler::serveFile(const std::string& fullPath, HttpResponse& respons
 	return 200;
 }
 
-int RequestHandler::redirectDirectoryRequest(const std::string& uri, HttpResponse& response) const {
+int RequestHandler::normalizeDirectoryRequest(const std::string& uri, HttpResponse& response) const {
     // enforce trailing slash on the URI
 	if (uri.empty() || uri[uri.length() - 1] == '/') {
 		return 0;
@@ -377,7 +376,7 @@ int RequestHandler::redirectDirectoryRequest(const std::string& uri, HttpRespons
 int RequestHandler::serveExistingPath(const LocationConfig& matchedLocation, std::string& fullPath, struct stat& pathStat, const std::string& uri, HttpResponse& response) const {
 	// check if it's a directory
 	if (S_ISDIR(pathStat.st_mode)) {
-        int redirect = redirectDirectoryRequest(uri, response);
+        int redirect = normalizeDirectoryRequest(uri, response);
         if(redirect) {
 			return redirect;
 		}

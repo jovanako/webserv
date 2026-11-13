@@ -80,20 +80,38 @@ void CgiExecutor::cleanup() {
 }
 
 bool CgiExecutor::validateScript(const CgiRequest& cgiReq) {
-	struct stat scriptStat;
-	const std::string& scriptPath = cgiReq.getScriptPath();
-
-	if (stat(scriptPath.c_str(), &scriptStat) != 0) {
+	const std::string& workDir = cgiReq.getWorkingDirectory();
+	struct stat dirStat;
+	if (!workDir.empty() && (stat(workDir.c_str(), &dirStat) != 0 || !S_ISDIR(dirStat.st_mode))) {
 		_errorCode = 404;
 		_state = CGI_ERROR;
 		return false;
 	}
 
-	if (!S_ISREG(scriptStat.st_mode) || access(scriptPath.c_str(), R_OK) != 0) {
-		_errorCode = 403;
-		_state = CGI_ERROR;
-		return false;
+	struct stat scriptStat;
+	const std::string& scriptPath = cgiReq.getScriptPath();
+	if (stat(scriptPath.c_str(), &scriptStat) == 0) {
+		if (!S_ISREG(scriptStat.st_mode) || access(scriptPath.c_str(), R_OK) != 0) {
+			_errorCode = 403;
+			_state = CGI_ERROR;
+			return false;
+		}
 	}
+
+	// struct stat scriptStat;
+	// const std::string& scriptPath = cgiReq.getScriptPath();
+
+	// if (stat(scriptPath.c_str(), &scriptStat) != 0) {
+	// 	_errorCode = 404;
+	// 	_state = CGI_ERROR;
+	// 	return false;
+	// }
+
+	// if (!S_ISREG(scriptStat.st_mode) || access(scriptPath.c_str(), R_OK) != 0) {
+	// 	_errorCode = 403;
+	// 	_state = CGI_ERROR;
+	// 	return false;
+	// }
 
 	struct stat execStat;
 	const std::string& executable = cgiReq.getExecutable();
@@ -225,6 +243,7 @@ bool CgiExecutor::readOutput() {
 
 	if (bytesRead > 0) {
 		_outputBuffer.insert(_outputBuffer.end(), buffer, buffer + bytesRead);
+		_startTime = std::time(NULL);
 		return true;
 	}
 

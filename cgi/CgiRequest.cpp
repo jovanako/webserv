@@ -54,6 +54,18 @@ CgiRequest::CgiRequest(const CgiRequest& other)
 	  _envVars(other._envVars),
 	  _body(other._body) {}
 
+CgiRequest& CgiRequest::operator=(const CgiRequest& other) {
+	if (this != &other) {
+		_executable = other._executable;
+	  	_scriptPath = other._scriptPath;
+	  	_scriptFileName = other._scriptFileName;
+	  	_workingDirectory = other._workingDirectory;
+	  	_envVars = other._envVars;
+	  	// _body = request.getBody(); // TO DO
+	}
+	return *this;
+}
+
 CgiRequest::~CgiRequest() {}
 
 const std::string& CgiRequest::getExecutable() const {
@@ -103,6 +115,9 @@ void CgiRequest::initPaths(const LocationConfig& location, const HttpRequest& re
 	}
 
 	pathInfo = request.getUri().substr(scriptName.length());
+	if (pathInfo.empty()) {
+		pathInfo = request.getUri(); // 42 tester compliance, not NGINX behavior
+	}
 	_scriptPath = resolveScriptPath(location, scriptName);
 }
 
@@ -134,9 +149,7 @@ void CgiRequest::initContentEnvVars(const HttpRequest& request) {
 void CgiRequest::initStandardEnvVars(const ServerConfig& server, const LocationConfig& location, const HttpRequest& request, const std::string& scriptName, const std::string& pathInfo) {
 	addEnvVar("GATEWAY_INTERFACE", "CGI/1.1");
 	addEnvVar("PATH_INFO", pathInfo);
-	if (!pathInfo.empty()) {
-		addEnvVar("PATH_TRANSLATED", resolvePathTranslated(location, pathInfo));
-	}
+	addEnvVar("PATH_TRANSLATED", resolvePathTranslated(location, pathInfo));
 	addEnvVar("QUERY_STRING", request.getQueryString());
 	addEnvVar("REMOTE_ADDR", request.getRemoteAddr());
 	addEnvVar("REMOTE_HOST", request.getRemoteAddr());
