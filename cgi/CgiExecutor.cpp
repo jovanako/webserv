@@ -181,8 +181,7 @@ bool CgiExecutor::start(const CgiRequest& cgiReq) {
 		return false;
 	}
 
-	int flags = fcntl(pipeFd[0], F_GETFL, 0);
-	if (flags == -1 || fcntl(pipeFd[0], F_SETFL, flags | O_NONBLOCK) == -1) {
+	if (fcntl(pipeFd[0], F_SETFL, O_NONBLOCK) == -1) {
 		close(pipeFd[0]);
 		close(pipeFd[1]);
 		_errorCode = 500;

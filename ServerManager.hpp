@@ -48,14 +48,12 @@ class ServerManager {
 		void initServers();
 		int createListeningSocket(const ServerConfig& server,
 			struct addrinfo*& serverInfo);
-		bool setListeningSocketNonBlocking(int listenFd,
-			const std::string& host, int port);
+		bool setListeningSocketNonBlocking(int listenFd);
 		bool bindListeningSocket(int listenFd, struct addrinfo* serverInfo,
 			const std::string& host, const std::string& portStr);
 		void enableAddressReuse(int listenFd);
 		bool startListening(int listenFd);
-		bool configureListeningSocket(int listenFd, struct addrinfo* serverInfo,
-			const std::string& host, int port, const std::string& portStr);
+		bool configureListeningSocket(int listenFd, struct addrinfo* serverInfo, const std::string& host, const std::string& portStr);
 		void registerListeningSocket(int listenFd, size_t serverIndex,
 			const std::string& host, int port,
 			std::set<std::pair<std::string, int> >& boundAddresses);

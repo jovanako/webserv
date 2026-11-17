@@ -348,17 +348,8 @@ int ServerManager::createListeningSocket(const ServerConfig& server,
 	return listenFd;
 }
 
-bool ServerManager::setListeningSocketNonBlocking(int listenFd,
-	const std::string& host, int port) {
-	int flags = fcntl(listenFd, F_GETFL, 0);
-	if (flags == -1) {
-		std::cerr << "Error: fcntl(F_GETFL) failed for host " << host << ":" << port << std::endl;
-		close(listenFd);
-		return false;
-	}
-
-	flags |= O_NONBLOCK;
-	if (fcntl(listenFd, F_SETFL, flags) == -1) {
+bool ServerManager::setListeningSocketNonBlocking(int listenFd) {
+	if (fcntl(listenFd, F_SETFL, O_NONBLOCK) == -1) {
 		std::cerr << "Failed to set non-blocking flag" << std::endl;
 		close(listenFd);
 		return false;
@@ -394,13 +385,11 @@ bool ServerManager::startListening(int listenFd) {
 	return true;
 }
 
-bool ServerManager::configureListeningSocket(int listenFd,
-	struct addrinfo* serverInfo, const std::string& host, int port,
-	const std::string& portStr) {
+bool ServerManager::configureListeningSocket(int listenFd, struct addrinfo* serverInfo, const std::string& host, const std::string& portStr) {
 	// allow immediate reuse of the port
 	enableAddressReuse(listenFd);
 
-	if (!setListeningSocketNonBlocking(listenFd, host, port)) {
+	if (!setListeningSocketNonBlocking(listenFd)) {
 		return false;
 	}
 
@@ -436,7 +425,7 @@ void ServerManager::initServers() {
 			throw std::runtime_error("Failed to create listening socket");
 		}
 		
-		if (!configureListeningSocket(listenFd, serverInfo, host, port, portStr)) {
+		if (!configureListeningSocket(listenFd, serverInfo, host, portStr)) {
 			throw std::runtime_error("Failed to configure listening socket");
 		}
 
