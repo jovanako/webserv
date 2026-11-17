@@ -46,17 +46,13 @@ class ServerManager {
 		void writeClientResponse(size_t pollIndex, Client& client);
 		void updateClientPollEvents(size_t pollIndex, const Client& client);
 		void initServers();
-		int createListeningSocket(const ServerConfig& server,
-			struct addrinfo*& serverInfo);
+		int createListeningSocket(const ServerConfig& server, struct addrinfo*& serverInfo);
 		bool setListeningSocketNonBlocking(int listenFd);
-		bool bindListeningSocket(int listenFd, struct addrinfo* serverInfo,
-			const std::string& host, const std::string& portStr);
+		bool bindListeningSocket(int listenFd, struct addrinfo* serverInfo, const std::string& host, const std::string& portStr);
 		void enableAddressReuse(int listenFd);
 		bool startListening(int listenFd);
 		bool configureListeningSocket(int listenFd, struct addrinfo* serverInfo, const std::string& host, const std::string& portStr);
-		void registerListeningSocket(int listenFd, size_t serverIndex,
-			const std::string& host, int port,
-			std::set<std::pair<std::string, int> >& boundAddresses);
+		void registerListeningSocket(int listenFd, size_t serverIndex, const std::string& host, int port, std::set<std::pair<std::string, int> >& boundAddresses);
 		bool waitForEvents();
 		void addPendingClients(std::vector<struct pollfd>& pendingFds);
 		bool handlePollEvent(size_t pollIndex, std::vector<struct pollfd>& pendingFds);

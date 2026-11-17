@@ -322,8 +322,7 @@ static bool isValidPort(const std::string& portStr) {
 	return port >= 1 && port <= 65535;
 }
 
-static bool splitHostAndPort(const std::string& hostHeaderValue,
-	std::string& host) {
+static bool splitHostAndPort(const std::string& hostHeaderValue, std::string& host) {
 	size_t colonPos = hostHeaderValue.find(':');
 	if (colonPos == std::string::npos) {
 		host = hostHeaderValue;
@@ -355,8 +354,7 @@ static std::string toLowerCopy(const std::string& value) {
 	return lowerValue;
 }
 
-static bool isDuplicateRestrictedHeader(const std::string& key,
-	const std::map<std::string, std::string>& headers) {
+static bool isDuplicateRestrictedHeader(const std::string& key, const std::map<std::string, std::string>& headers) {
 	if (key != "host" && key != "content-length"
 		&& key != "transfer-encoding") {
 		return false;

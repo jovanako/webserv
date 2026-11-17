@@ -44,8 +44,7 @@ bool RequestParser::hasHeaderEnd(size_t& headerEnd) const {
     return headerEnd != std::string::npos;
 }
 
-bool RequestParser::parseRequestLineParts(const std::string& requestLine,
-    std::string& method, std::string& uri, std::string& version) const {
+bool RequestParser::parseRequestLineParts(const std::string& requestLine, std::string& method, std::string& uri, std::string& version) const {
     std::istringstream stream(requestLine);
     if (!(stream >> method >> uri >> version)) {
         return false;
@@ -58,8 +57,7 @@ bool RequestParser::parseRequestLineParts(const std::string& requestLine,
     return true;
 }
 
-bool RequestParser::applyRequestLine(const std::string& method, const std::string& uri,
-        const std::string& version, HttpResponse& response) {
+bool RequestParser::applyRequestLine(const std::string& method, const std::string& uri, const std::string& version, HttpResponse& response) {
     _request.setMethod(method);
     _request.setUri(uri);
 
@@ -84,7 +82,8 @@ bool RequestParser::applyRequestLine(const std::string& method, const std::strin
 
 bool RequestParser::parseRequestLine(size_t& firstLineEnd, HttpResponse& response) {
     firstLineEnd = _readBuffer.find("\r\n");
-    if (firstLineEnd == std::string::npos) return false;
+    if (firstLineEnd == std::string::npos)
+		return false;
 
     std::string requestLine = _readBuffer.substr(0, firstLineEnd);
     std::string method;
@@ -109,8 +108,7 @@ static void trimHeaderValue(std::string& value) {
     value = value.substr(valueStart, valueEnd - valueStart + 1);
 }
 
-bool RequestParser::storeParsedHeader(const std::string& key,
-        const std::string& value, HttpResponse& response) {
+bool RequestParser::storeParsedHeader(const std::string& key, const std::string& value, HttpResponse& response) {
     _request.addHeader(key, value);
     if (_request.getRequestState() == HttpRequest::PARSE_ERROR) {
         response.setStatusCode(_request.getErrorCode());
@@ -143,7 +141,8 @@ bool RequestParser::parseHeaders(HttpResponse& response) {
 
     while (lineStart < headerBlockEnd) {
         size_t lineEnd = _readBuffer.find("\r\n", lineStart);
-        if (lineEnd == std::string::npos) break;
+        if (lineEnd == std::string::npos)
+			break;
 
         std::string line = _readBuffer.substr(lineStart, lineEnd - lineStart);
 

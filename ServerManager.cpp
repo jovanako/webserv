@@ -284,8 +284,7 @@ void ServerManager::checkClientTimeouts() {
 	}
 }
 
-bool ServerManager::handleClientEvent(size_t pollIndex,
-	std::vector<struct pollfd>& pendingFds) {
+bool ServerManager::handleClientEvent(size_t pollIndex, std::vector<struct pollfd>& pendingFds) {
 	int currentFd = _pollFds[pollIndex].fd;
 	std::map<int, Client>::iterator clientIter = _clients.find(currentFd);
 	if (clientIter == _clients.end()) {
@@ -455,8 +454,7 @@ void ServerManager::addPendingClients(std::vector<struct pollfd>& pendingFds) {
 	pendingFds.clear();
 }
 
-bool ServerManager::handlePollEvent(size_t pollIndex,
-	std::vector<struct pollfd>& pendingFds) {
+bool ServerManager::handlePollEvent(size_t pollIndex, std::vector<struct pollfd>& pendingFds) {
 	int currentFd = _pollFds[pollIndex].fd;
 	std::map<int, size_t>::iterator serverIter = _listenSockets.find(currentFd);
 	std::map<int, int>::iterator pipeIter = _cgiPipes.find(currentFd);
@@ -519,7 +517,6 @@ void ServerManager::run(volatile sig_atomic_t& g_running) {
 		if (!waitForEvents()) {
 			continue;
 		}
-
 		processPollEvents(pendingFds);
 		checkCgiTimeouts();
 		checkClientTimeouts();
