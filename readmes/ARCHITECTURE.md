@@ -67,10 +67,5 @@ Analyzed CgiResponse.hpp:L1-37
 
 ### 2. Choice of I/O Multiplexing: `poll()`
 
-We chose **`poll()`** (used in `ServerManager::waitForEvents()` at [ServerManager.cpp](file:///home/jovana/Desktop/42Berlin/webserv/ServerManager.cpp#L435-L446) with a `1000 ms` timeout and a `std::vector<struct pollfd>`).
-
-**Why `poll()`:**
-* **No `FD_SETSIZE` limit (unlike `select()`)**: `select()` uses fixed-size `fd_set` bitmasks capped at `1024` fds and requires rebuilding the bitmasks before every call. `poll()` operates on a dynamic array (`std::vector<struct pollfd>`) with no hard fd cap and separates requested `events` from returned `revents`.
-* **POSIX portability (unlike `epoll` / `kqueue`)**: `epoll` is Linux-only and `kqueue` is BSD/macOS-only. `poll()` is standard POSIX, so the same code compiles and runs identically on Linux and macOS without platform-specific `#ifdef` branches.
-* **Unified handling of all fd types**: A single `_pollFds` vector cleanly multiplexes listening sockets, client sockets (`POLLIN` / `POLLOUT`), and CGI output pipes (`POLLIN` / `POLLHUP`), while the `1000 ms` timeout ensures `checkCgiTimeouts()` and `checkClientTimeouts()` run regularly even when no sockets are active.
-* **Trade-off**: `poll()` is `O(n)` per call because both the kernel and our loop scan `_pollFds` linearly, whereas `epoll`/`kqueue` are `O(1)` for ready events. At `webserv`'s scale (hundreds to a few thousand concurrent connections), `poll()`'s simplicity and portability outweigh `epoll`'s advantage at tens of thousands of mostly-idle connections.
+- **POSIX portability** (unlike epoll / kqueue): epoll is Linux-only and kqueue is macOS-only. poll() is standard POSIX, so the same code compiles and runs identically on Linux and macOS.
+- **Dynamic array** (unlike select()): poll() uses a dynamic array of struct pollfds, where events are preserved, and kernel writes revents, and these are available through the struct pollfd. On the other hand, select() splits events across separate bitmasks that you have to copy/rebuild every iteration, requires tracking max_fd + 1, and has no POLLHUP flag.
