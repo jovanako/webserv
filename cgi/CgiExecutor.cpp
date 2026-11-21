@@ -210,6 +210,8 @@ bool CgiExecutor::start(const CgiRequest& cgiReq) {
 	return true;
 }
 
+/* Avoiding zombie processes: parent calls waitpid() on a finished child process
+to collect its exit status and let the OS remove it from the process table */
 bool CgiExecutor::reapChild() {
 	if (_pid <= 0) {
 		return true;
