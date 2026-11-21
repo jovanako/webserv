@@ -216,10 +216,7 @@ bool CgiExecutor::reapChild() {
 	}
 
 	int status = 0;
-	pid_t result = waitpid(_pid, &status, WNOHANG); // >0 = exited & was reaped; 0 = still running; -1 = error
-	if (result == 0) {
-		result = waitpid(_pid, &status, 0); // 0: block until child exits
-	}
+	pid_t result = waitpid(_pid, &status, 0); // 0: block until child exits
 
 	_pid = -1;
 	if (result < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
