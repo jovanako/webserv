@@ -51,8 +51,7 @@ const std::vector<char>& CgiResponse::getBody() const {
 	return _body;
 }
 
-bool CgiResponse::findHeaderBoundary(const std::vector<char>& rawOutput,
-	size_t& headerEnd, size_t& bodyStart) const {
+bool CgiResponse::findHeaderBoundary(const std::vector<char>& rawOutput, size_t& headerEnd, size_t& bodyStart) const {
 	for (size_t i = 0; i < rawOutput.size(); ++i) {
 		if (i + 3 < rawOutput.size()
 			&& rawOutput[i] == '\r' && rawOutput[i + 1] == '\n'

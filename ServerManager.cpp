@@ -120,13 +120,11 @@ void ServerManager::unregisterCgiPipe(int pipeFd) {
 }
 
 void ServerManager::unregisterClientCgiPipes(int clientFd) {
-	for (std::map<int, int>::iterator it = _cgiPipes.begin();
-		it != _cgiPipes.end(); ) {
+	for (std::map<int, int>::iterator it = _cgiPipes.begin(); it != _cgiPipes.end(); ) {
 		if (it->second == clientFd) {
 			int pipeFd = it->first;
 			_cgiPipes.erase(it++);
-			for (std::vector<struct pollfd>::iterator pIt = _pollFds.begin();
-				pIt != _pollFds.end(); ++pIt) {
+			for (std::vector<struct pollfd>::iterator pIt = _pollFds.begin(); pIt != _pollFds.end(); ++pIt) {
 				if (pIt->fd == pipeFd) {
 					_pollFds.erase(pIt);
 					break;
