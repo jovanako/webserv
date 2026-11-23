@@ -131,7 +131,8 @@ void CgiExecutor::executeChild(const CgiRequest& cgiReq, int pipeReadFd, int pip
 
 	if (dup2(pipeWriteFd, STDOUT_FILENO) == -1) {
 		close(pipeWriteFd);
-		_exit(1);
+		std::exit(1);
+
 	}
 	close(pipeWriteFd);
 
@@ -139,7 +140,7 @@ void CgiExecutor::executeChild(const CgiRequest& cgiReq, int pipeReadFd, int pip
 	if (bodyFd != -1) {
 		if (dup2(bodyFd, STDIN_FILENO) == -1) {
 			close(bodyFd);
-			_exit(1);
+			std::exit(1);
 		}
 		close(bodyFd);
 	} else {
@@ -152,14 +153,14 @@ void CgiExecutor::executeChild(const CgiRequest& cgiReq, int pipeReadFd, int pip
 
 	const std::string& workDir = cgiReq.getWorkingDirectory();
 	if (!workDir.empty() && chdir(workDir.c_str()) != 0) {
-		_exit(1);
+		std::exit(1);
 	}
 
 	std::vector<char*> argv = cgiReq.buildArgv();
 	std::vector<char*> envp = cgiReq.buildEnvp();
 
 	execve(cgiReq.getExecutable().c_str(), &argv[0], &envp[0]);
-	_exit(1);
+	std::exit(1);
 }
 
 bool CgiExecutor::start(const CgiRequest& cgiReq) {

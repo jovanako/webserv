@@ -96,7 +96,8 @@ When `Client::startCgiExecution()` is called, it constructs a `CgiRequest(server
        - If the request has a body (`bodyFd != -1`), duplicates `bodyFd` onto `STDIN_FILENO` via `dup2()`.
        - Otherwise, opens `/dev/null` read-only and duplicates it onto `STDIN_FILENO` so the script immediately sees EOF on standard input.
      - Changes the working directory to `_workingDirectory` via `chdir()`.
-     - Invokes `execve(_executable, argv, envp)`. If `execve()` fails, terminates the child immediately with `_exit(1)`.
+     - Invokes `execve(_executable, argv, envp)`. If `execve()` fails, terminates the child immediately with `std::exit(1);`
+`.
    - **In the parent process (`_pid > 0`)**:
      - Closes the pipe write end (`pipeFd[1]`).
      - Saves `_pipeOut = pipeFd[0]`, records `_startTime = std::time(NULL)`, and transitions to `CGI_RUNNING`.
