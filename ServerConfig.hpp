@@ -11,16 +11,16 @@ class ServerConfig {
 	private:
 		std::string                 		_host;
 		int                         		_port;
-		std::string							_root; // new
-		std::vector<std::string>    		_index; // new
-		std::vector<std::string>    		_allowedMethods; // new
+		std::string							_root;
+		std::vector<std::string>    		_index;
+		std::vector<std::string>    		_allowedMethods;
 		std::vector<std::string>    		_serverNames;
 		std::map<int, std::string>  		_errorPages;
 		size_t                      		_clientMaxBodySize;
-		bool                        		_autoindex; // new
-		std::map<std::string, std::string>	_cgiHandlers; // new
-		std::string							_uploadStore; // new
-		std::pair<int, std::string>         _redirect; // new
+		bool                        		_autoindex;
+		std::map<std::string, std::string>	_cgiHandlers;
+		std::string							_uploadStore;
+		std::pair<int, std::string>         _redirect;
 		std::vector<LocationConfig>			_locations;
 
 	public:

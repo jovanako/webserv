@@ -19,7 +19,7 @@ class CgiRequest {
 		std::string					_scriptFileName;
 		std::string					_workingDirectory;
 		std::vector<std::string>	_envVars;
-		const RequestBody&			_body;
+		const RequestBody&				_body;
 
 		CgiRequest();
 		CgiRequest& operator=(const CgiRequest& other);

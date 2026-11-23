@@ -61,7 +61,7 @@ CgiRequest& CgiRequest::operator=(const CgiRequest& other) {
 	  	_scriptFileName = other._scriptFileName;
 	  	_workingDirectory = other._workingDirectory;
 	  	_envVars = other._envVars;
-	  	// _body = request.getBody(); // TO DO
+	  	_body = other._body;
 	}
 	return *this;
 }

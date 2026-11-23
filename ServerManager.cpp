@@ -59,8 +59,7 @@ void ServerManager::setClientNonBlocking(int clientFd) {
 	fcntl(clientFd, F_SETFL, O_NONBLOCK);
 }
 
-void ServerManager::registerClientSocket(int clientFd,
-	std::vector<struct pollfd>& pendingFds) {
+void ServerManager::registerClientSocket(int clientFd, std::vector<struct pollfd>& pendingFds) {
 	struct pollfd pfd;
 	pfd.fd = clientFd;
 	pfd.events = POLLIN;
@@ -188,8 +187,7 @@ bool ServerManager::handleClientInput(size_t pollIndex, int clientFd, Client& cl
 	return removeCompletedClient(clientFd, client);
 }
 
-void ServerManager::processClient(int clientFd, Client& client,
-	std::vector<struct pollfd>& pendingFds) {
+void ServerManager::processClient(int clientFd, Client& client, std::vector<struct pollfd>& pendingFds) {
 	if (client.getClientState() == Client::PROCESSING) {
 		client.handleProcessing();
 		if (client.getClientState() == Client::CGI_PIPE_WAIT) {
@@ -200,8 +198,7 @@ void ServerManager::processClient(int clientFd, Client& client,
 
 void ServerManager::writeClientResponse(size_t pollIndex, Client& client) {
 	// send response if socket is writable
-	if ((_pollFds[pollIndex].revents & POLLOUT) &&
-		(client.getClientState() == Client::WRITING_RESPONSE)) {
+	if ((_pollFds[pollIndex].revents & POLLOUT) && (client.getClientState() == Client::WRITING_RESPONSE)) {
 		client.handleWrite();
 	}
 }
@@ -244,8 +241,7 @@ bool ServerManager::handleCgiPipeEvent(size_t pollIndex) {
 
 void ServerManager::checkCgiTimeouts() {
 	std::vector<int> timedOutPipes;
-	for (std::map<int, int>::const_iterator it = _cgiPipes.begin();
-		it != _cgiPipes.end(); ++it) {
+	for (std::map<int, int>::const_iterator it = _cgiPipes.begin(); it != _cgiPipes.end(); ++it) {
 		std::map<int, Client>::iterator cIt = _clients.find(it->second);
 		if (cIt != _clients.end() && cIt->second.hasCgiTimedOut()) {
 			timedOutPipes.push_back(it->first);
@@ -303,9 +299,7 @@ bool ServerManager::handleClientEvent(size_t pollIndex, std::vector<struct pollf
 	return false;
 }
 
-void ServerManager::registerListeningSocket(int listenFd, size_t serverIndex,
-	const std::string& host, int port,
-	std::set<std::pair<std::string, int> >& boundAddresses) {
+void ServerManager::registerListeningSocket(int listenFd, size_t serverIndex, const std::string& host, int port, std::set<std::pair<std::string, int> >& boundAddresses) {
 	// add the successfully bound host and port to our tracking set
 	boundAddresses.insert(std::make_pair(host, port));
 
@@ -320,8 +314,7 @@ void ServerManager::registerListeningSocket(int listenFd, size_t serverIndex,
 	_pollFds.push_back(pfd);
 }
 
-int ServerManager::createListeningSocket(const ServerConfig& server,
-	struct addrinfo*& serverInfo) {
+int ServerManager::createListeningSocket(const ServerConfig& server, struct addrinfo*& serverInfo) {
 	struct addrinfo hints;
 	std::memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_INET;
@@ -335,8 +328,7 @@ int ServerManager::createListeningSocket(const ServerConfig& server,
 		return -1;
 	}
 
-	int listenFd = socket(serverInfo->ai_family, serverInfo->ai_socktype,
-		serverInfo->ai_protocol);
+	int listenFd = socket(serverInfo->ai_family, serverInfo->ai_socktype, serverInfo->ai_protocol);
 	if (listenFd < 0) {
 		freeaddrinfo(serverInfo);
 		return -1;
@@ -353,9 +345,7 @@ bool ServerManager::setListeningSocketNonBlocking(int listenFd) {
 	return true;
 }
 
-bool ServerManager::bindListeningSocket(int listenFd,
-	struct addrinfo* serverInfo, const std::string& host,
-	const std::string& portStr) {
+bool ServerManager::bindListeningSocket(int listenFd, struct addrinfo* serverInfo, const std::string& host, const std::string& portStr) {
 	if (bind(listenFd, serverInfo->ai_addr, serverInfo->ai_addrlen) < 0) {
 		std::cerr << "Error: bind failed for " << host << ":" << portStr << "\n";
 		close(listenFd);
@@ -453,8 +443,8 @@ void ServerManager::addPendingClients(std::vector<struct pollfd>& pendingFds) {
 
 bool ServerManager::handlePollEvent(size_t pollIndex, std::vector<struct pollfd>& pendingFds) {
 	int currentFd = _pollFds[pollIndex].fd;
-	std::map<int, size_t>::iterator serverIter = _listenSockets.find(currentFd);
-	std::map<int, int>::iterator pipeIter = _cgiPipes.find(currentFd);
+	std::map<int, size_t>::iterator serverIter = _listenSockets.find(currentFd); // <listenFd, Server index>
+	std::map<int, int>::iterator pipeIter = _cgiPipes.find(currentFd); // <pipeFd, clientFd>
 
 	if (_pollFds[pollIndex].revents & (POLLERR | POLLNVAL)) {
 		if (serverIter != _listenSockets.end()) {

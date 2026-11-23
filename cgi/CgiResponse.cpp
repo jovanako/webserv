@@ -149,8 +149,7 @@ void CgiResponse::applyTo(HttpResponse& response) const {
 	bool hasContentType = false;
 	bool hasLocation = false;
 
-	for (std::map<std::string, std::string>::const_iterator it = _headers.begin();
-		it != _headers.end(); ++it) {
+	for (std::map<std::string, std::string>::const_iterator it = _headers.begin(); it != _headers.end(); ++it) {
 		std::string lowerKey = toLowerCopy(it->first);
 		if (lowerKey == "content-type") {
 			hasContentType = true;
@@ -161,7 +160,7 @@ void CgiResponse::applyTo(HttpResponse& response) const {
 	}
 
 	if (finalStatus == 200 && hasLocation) {
-		finalStatus = 302;
+		finalStatus = 302; // Found
 	}
 
 	response.setStatusCode(finalStatus);
