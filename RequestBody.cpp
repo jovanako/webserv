@@ -79,6 +79,10 @@ bool RequestBody::rewind() const {
 	}
 	close(_fd);
 	_fd = open(_filePath.c_str(), O_RDWR);
+	if (_fd < 0) {
+		_fd = -1;
+		return false;
+	}
 	return true;
 }
 
