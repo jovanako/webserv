@@ -306,10 +306,6 @@ Appends raw bytes to `_body` (`RequestBody::append()`). If writing to the tempor
 
 Rewinds the underlying `RequestBody` file descriptor offset back to byte `0` (`RequestBody::rewind()`) once body parsing completes.
 
-### `resetBody()`
-
-Closes and resets `_body` (`RequestBody::reset()`).
-
 ### `makeFullPath(const LocationConfig&)`
 
 Combines the matched location's root with the request URI after removing the location prefix. It also normalizes the slash between the root and remaining URI path.

@@ -27,6 +27,8 @@ RequestBody& RequestBody::operator=(const RequestBody& other) {
 }
 
 RequestBody::~RequestBody() {
+	std::remove(_filePath.c_str());
+	_filePath.clear();
 	reset();
 }
 
@@ -46,9 +48,6 @@ bool RequestBody::openTempFile() {
 		return false;
 	}
 
-	// Unlink immediately so the OS removes the file as soon as all FDs close
-	std::remove(_filePath.c_str());
-	_filePath.clear();
 	return true;
 }
 
@@ -78,7 +77,9 @@ bool RequestBody::rewind() const {
 	if (_fd == -1) {
 		return true;
 	}
-	return lseek(_fd, 0, SEEK_SET) != -1;
+	close(_fd);
+	_fd = open(_filePath.c_str(), O_RDWR);
+	return true;
 }
 
 bool RequestBody::writeTo(std::ofstream& outFile) const {

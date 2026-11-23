@@ -77,7 +77,7 @@ int RequestHandler::processRequest(const HttpRequest& request, HttpResponse& res
     if (redirectCode > 0) {
         return redirectCode;
     }
-    if(tryCgiHandler(*matchedLocation, uri)) {
+    if (tryCgiHandler(*matchedLocation, uri)) {
         return 0;
     }
     std::string fullPath = request.makeFullPath(*matchedLocation, matchedLocation->getRoot());

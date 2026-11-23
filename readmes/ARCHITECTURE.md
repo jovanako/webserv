@@ -1,21 +1,4 @@
-Ran list project files
-Analyzed ServerManager.hpp:L1-71
-Analyzed ServerManager.cpp:L1-525
-Analyzed Client.hpp:L1-97
-Analyzed Client.cpp:L1-399
-Analyzed main.cpp:L1-39
-Analyzed ConfigParser.hpp:L1-66
-Analyzed ServerConfig.hpp:L1-64
-Analyzed LocationConfig.hpp:L1-65
-Analyzed RequestParser.hpp:L1-49
-Analyzed RequestHandler.hpp:L1-54
-Analyzed ResponseBuilder.hpp:L1-30
-Analyzed HttpRequest.hpp:L1-79
-Analyzed RequestBody.hpp:L1-40
-Analyzed HttpResponse.hpp:L1-39
-Analyzed CgiRequest.hpp:L1-52
-Analyzed CgiExecutor.hpp:L1-63
-Analyzed CgiResponse.hpp:L1-37
+
 
 ### 1. Architecture Overview
 

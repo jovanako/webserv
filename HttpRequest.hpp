@@ -71,7 +71,6 @@ class HttpRequest {
 		void addHeader(const std::string& key, const std::string& value);
 		bool appendBody(const char* data, size_t size);
 		bool rewindBody() const;
-		void resetBody();
 
 		std::string	makeFullPath(const LocationConfig& matchedLocation, const std::string& baseDir) const;
 	};

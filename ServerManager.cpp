@@ -93,8 +93,7 @@ void ServerManager::acceptClient(int listenFd, std::vector<struct pollfd>& pendi
 	_clients[clientFd] = client;
 }
 
-void ServerManager::registerCgiPipe(int pipeFd, int clientFd,
-	std::vector<struct pollfd>& pendingFds) {
+void ServerManager::registerCgiPipe(int pipeFd, int clientFd, std::vector<struct pollfd>& pendingFds) {
 	if (pipeFd < 0) {
 		return;
 	}

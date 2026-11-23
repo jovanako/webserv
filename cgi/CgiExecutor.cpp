@@ -98,6 +98,7 @@ bool CgiExecutor::validateScript(const CgiRequest& cgiReq) {
 		}
 	}
 
+	// removed because of the .bla file requirement in 42 tester
 	// struct stat scriptStat;
 	// const std::string& scriptPath = cgiReq.getScriptPath();
 

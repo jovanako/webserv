@@ -437,10 +437,6 @@ bool HttpRequest::rewindBody() const {
 	return _body.rewind();
 }
 
-void HttpRequest::resetBody() {
-	_body.reset();
-}
-
 std::string HttpRequest::makeFullPath(const LocationConfig& matchedLocation, const std::string& baseDir) const {
 	std::string path = matchedLocation.getPath();
 	std::string strippedUri = _uri;

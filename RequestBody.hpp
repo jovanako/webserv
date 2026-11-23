@@ -14,11 +14,12 @@ class RequestBody {
 		static const size_t	BUFFER_SIZE = 4096;
 		static size_t		_fileCounter;
 
-		int					_fd;
+		mutable int			_fd;
 		std::string			_filePath;
 		size_t				_size;
 
 		bool openTempFile();
+		void	reset();
 
 	public:
 		RequestBody();
@@ -29,7 +30,6 @@ class RequestBody {
 		bool	append(const char* data, size_t size);
 		bool	rewind() const;
 		bool	writeTo(std::ofstream& outFile) const;
-		void	reset();
 
 		int		getFd() const;
 		size_t	getSize() const;
