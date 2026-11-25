@@ -47,7 +47,7 @@ class Client {
 		time_t						_lastActivity;
 
 		void		handleReadHeader();
-		bool		readChunk();
+		bool		readPart();
 		bool		getHostHeaderValue(std::string& hostValue);
 		std::string	extractHostName(const std::string& hostValue) const;
 		void		applyVirtualHostSelection(const std::string& hostName);

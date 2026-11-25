@@ -177,7 +177,7 @@ void Client::prepareRequestBody(size_t headerEnd) {
 
 void Client::handleReadHeader() {
 	size_t headerEnd;
-	if(!_parser.hasHeaderEnd(headerEnd) && !readChunk()) {
+	if(!_parser.hasHeaderEnd(headerEnd) && !readPart()) {
 		return;
 	}
 	if(_parser.hasHeaderEnd(headerEnd)) {
@@ -202,7 +202,7 @@ void Client::handleReadHeader() {
 	}
 }
 
-bool Client::readChunk() {
+bool Client::readPart() {
 	char buf[BUFFER_SIZE];
 	ssize_t bytesRead = recv(_socketFd, buf, sizeof(buf), 0);
 		
@@ -382,7 +382,7 @@ void Client::handleRead() {
 	if (_clientState == READING_HEADER) {
 		handleReadHeader();
 	} else if (_clientState == READING_BODY) {
-		if (readChunk()) {
+		if (readPart()) {
 			handleReadBody();
 		}
 	}
