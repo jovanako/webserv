@@ -29,13 +29,16 @@ static bool isSkippedHttpHeader(const std::string& headerKey) {
 		|| headerKey == "proxy";
 }
 
+CgiRequest::CgiRequest()
+	: _body(NULL) {}
+
 CgiRequest::CgiRequest(const ServerConfig& server, const LocationConfig& location, const HttpRequest& request)
 	: _executable(""),
 	  _scriptPath(""),
 	  _scriptFileName(""),
 	  _workingDirectory(""),
 	  _envVars(),
-	  _body(request.getBody()) {
+	  _body(&request.getBody()) {
 	std::string scriptName;
 	std::string pathInfo;
 
@@ -84,7 +87,7 @@ const std::vector<std::string>& CgiRequest::getEnvVars() const {
 	return _envVars;
 }
 
-const RequestBody& CgiRequest::getBody() const {
+const RequestBody* CgiRequest::getBody() const {
 	return _body;
 }
 

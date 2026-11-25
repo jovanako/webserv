@@ -136,7 +136,7 @@ void CgiExecutor::executeChild(const CgiRequest& cgiReq, int pipeReadFd, int pip
 	}
 	close(pipeWriteFd);
 
-	int bodyFd = cgiReq.getBody().getFd();
+	int bodyFd = cgiReq.getBody() ? cgiReq.getBody()->getFd() : -1;
 	if (bodyFd != -1) {
 		if (dup2(bodyFd, STDIN_FILENO) == -1) {
 			close(bodyFd);
@@ -170,7 +170,7 @@ bool CgiExecutor::start(const CgiRequest& cgiReq) {
 		return false;
 	}
 
-	if (!cgiReq.getBody().rewind()) {
+	if (cgiReq.getBody() && !cgiReq.getBody()->rewind()) {
 		_errorCode = 500;
 		_state = CGI_ERROR;
 		return false;

@@ -19,10 +19,7 @@ class CgiRequest {
 		std::string					_scriptFileName;
 		std::string					_workingDirectory;
 		std::vector<std::string>	_envVars;
-		const RequestBody&				_body;
-
-		CgiRequest();
-		CgiRequest& operator=(const CgiRequest& other);
+		const RequestBody*			_body;
 		
 		void		initPaths(const LocationConfig& location, const HttpRequest& request, std::string& scriptName, std::string& pathInfo);
 		void		initWorkingDirectory();
@@ -36,15 +33,17 @@ class CgiRequest {
 		std::string	resolveServerName(const ServerConfig& server, const HttpRequest& request) const;
 	
 	public:
+		CgiRequest();
 		CgiRequest(const ServerConfig& server, const LocationConfig& location, const HttpRequest& request);
 		CgiRequest(const CgiRequest& other);
 		~CgiRequest();
+		CgiRequest& operator=(const CgiRequest& other);
 
 		const std::string&					getExecutable() const;
 		const std::string&					getScriptPath() const;
 		const std::string&					getWorkingDirectory() const;
 		const std::vector<std::string>&		getEnvVars() const;
-		const RequestBody&					getBody() const;
+		const RequestBody*					getBody() const;
 		std::vector<char*>					buildArgv() const;
 		std::vector<char*>					buildEnvp() const;
 };
