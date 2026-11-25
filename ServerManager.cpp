@@ -227,7 +227,7 @@ bool ServerManager::handleCgiPipeEvent(size_t pollIndex) {
 	}
 
 	Client& client = clientIter->second;
-	if (_pollFds[pollIndex].revents & (POLLIN | POLLHUP)) {
+	if (_pollFds[pollIndex].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)) {
 		client.handleCgiPipeWait();
 	}
 
@@ -317,17 +317,20 @@ void ServerManager::registerListeningSocket(int listenFd, size_t serverIndex, co
 int ServerManager::createListeningSocket(const ServerConfig& server, struct addrinfo*& serverInfo) {
 	struct addrinfo hints;
 	std::memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_PASSIVE;
+	hints.ai_family = AF_INET; // restricts the results to ipV4 addresses
+	hints.ai_socktype = SOCK_STREAM; // requests a TCP stream socket
+	hints.ai_flags = AI_PASSIVE; // indicates the socket will be used for bind()/listen() (a server socket)
 
 	std::string host = server.getHost();
 	std::string portStr = server.createPortString();
+	// resolves the host & port string into a struct addrinfo (linked list)
+	// serverInfo = result of hints + host and port
 	if (getaddrinfo(host.c_str(), portStr.c_str(), &hints, &serverInfo) != 0) {
 		std::cerr << "Error: getaddrinfo failed\n";
 		return -1;
 	}
 
+	// socket() asks the kernel to create a new socket fd using the info from getaddrinfo()
 	int listenFd = socket(serverInfo->ai_family, serverInfo->ai_socktype, serverInfo->ai_protocol);
 	if (listenFd < 0) {
 		freeaddrinfo(serverInfo);
@@ -363,6 +366,8 @@ void ServerManager::enableAddressReuse(int listenFd) {
 }
 
 bool ServerManager::startListening(int listenFd) {
+	// call listen() to mark a bound TCP socket as a passive socket
+	// it will wait for incoming connection requests until the server accepts them
 	if (listen(listenFd, 128) < 0) {
 		std::cerr << "Error: listen failed\n";
 		close(listenFd);
@@ -376,6 +381,7 @@ bool ServerManager::configureListeningSocket(int listenFd, struct addrinfo* serv
 	enableAddressReuse(listenFd);
 
 	if (!setListeningSocketNonBlocking(listenFd)) {
+		freeaddrinfo(serverInfo);
 		return false;
 	}
 
@@ -448,7 +454,7 @@ bool ServerManager::handlePollEvent(size_t pollIndex, std::vector<struct pollfd>
 
 	if (_pollFds[pollIndex].revents & (POLLERR | POLLNVAL)) {
 		if (serverIter != _listenSockets.end()) {
-			// it's a listening socket error (critical failure)
+			// it's a listening socket so we close listenFd and remove it from _listenSockets/_pollFds
 			std::cerr << "Critical error on listening socket fd: " << currentFd << std::endl;
 			close(currentFd);
 			_listenSockets.erase(serverIter);

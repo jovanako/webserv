@@ -89,16 +89,19 @@ void Client::setClientIp(const std::string& clientIp) {
 }
 
 bool Client::getHostHeaderValue(std::string& hostValue) {
-	if (_parser.getRequest().getVersion() != "HTTP/1.1") {
-		return true;
-	}
+	// if (_parser.getRequest().getVersion() != "HTTP/1.1") {
+	// 	return true;
+	// }
 
 	const std::map<std::string, std::string>& headers = _parser.getRequest().getHeaders();
 	std::map<std::string, std::string>::const_iterator it = headers.find("host");
 	if (it == headers.end()) {
-		_response.setStatusCode(400); // 400 Bad Request strictly required for HTTP/1.1
-		setupErrorResponse(_response.getStatusCode());
-		return false;
+		if (_parser.getRequest().getVersion() == "HTTP/1.1") {
+			_response.setStatusCode(400); // 400 Bad Request strictly required for HTTP/1.1
+			setupErrorResponse(_response.getStatusCode());
+			return false;
+		}
+		return true;
 	}
 
 	hostValue = it->second;

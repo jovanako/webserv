@@ -409,6 +409,8 @@ void HttpRequest::addHeader(const std::string& key, const std::string& value) {
 	}
 
 	if (lowerKey == "transfer-encoding") {
+		if (_version == "HTTP/1.0")
+			return handleError(*this, 400);
 		int errorCode = validateTransferEncoding(value);
 		if (errorCode != 0)
 			return handleError(*this, errorCode);
